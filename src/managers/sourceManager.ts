@@ -153,9 +153,9 @@ export class SourceManager {
                     } else {
                         progress.report({ message: 'Cloning repository...' });
                         const args = ['clone'];
-                        if (source.branch) { args.push('-b', source.branch); }
+                        if (source.branch) { args.push('-b', `'${source.branch}'`); }
                         args.push(source.url, sourceDir);
-                        execSync(`git ${args.map(a => a.includes('/') ? `'${a}'` : a).join(' ')}`, { stdio: 'pipe' });
+                        execSync(`git ${args.join(' ')}`, { stdio: 'pipe' });
                     }
                 } else {
                     progress.report({ message: 'Reading local path...' });

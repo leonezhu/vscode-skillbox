@@ -58,6 +58,11 @@
       {
         "command": "skillbox.updateSkill",
         "title": "Update Skill"
+      },
+      {
+        "command": "skillbox.openSettings",
+        "title": "Open Settings",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -69,6 +74,11 @@
         },
         {
           "command": "skillbox.refreshSources",
+          "when": "view == skillbox.sources",
+          "group": "navigation"
+        },
+        {
+          "command": "skillbox.openSettings",
           "when": "view == skillbox.sources",
           "group": "navigation"
         }
@@ -102,19 +112,39 @@
         "skillbox.centralRepo": {
           "type": "string",
           "default": "",
-          "description": "Central repository path for storing synced skills"
+          "description": "Central repository path for storing synced skills (leave empty to use VSCode global storage)"
         },
         "skillbox.defaultAgent": {
           "type": "string",
-          "enum": ["copilot", "openclaw", "claude"],
+          "enum": ["copilot", "openclaw", "claude", "cursor"],
+          "enumDescriptions": [
+            "GitHub Copilot - skills to .github/skills",
+            "OpenClaw - skills to .agents/skills",
+            "Claude - skills to .claude/skills",
+            "Cursor - skills to .cursor/skills"
+          ],
           "default": "copilot",
-          "description": "Default agent type"
+          "description": "Default agent type for skill installation"
         },
         "skillbox.defaultScope": {
           "type": "string",
           "enum": ["project", "global"],
+          "enumDescriptions": [
+            "Install to current workspace",
+            "Install to user home directory"
+          ],
           "default": "project",
           "description": "Default installation scope"
+        },
+        "skillbox.installMethod": {
+          "type": "string",
+          "enum": ["copy", "symlink"],
+          "enumDescriptions": [
+            "Copy skill files to target location",
+            "Create symbolic link (requires admin privileges on some systems)"
+          ],
+          "default": "copy",
+          "description": "Method for installing skills"
         }
       }
     }

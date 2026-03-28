@@ -38,8 +38,28 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         // Refresh Sources
-        vscode.commands.registerCommand('skillbox.refreshSources', () => {
+        vscode.commands.registerCommand('skillbox.refreshSources', async () => {
+            const sources = sourceManager.getSources();
+            if (sources.length === 0) {
+                vscode.window.showInformationMessage('No sources to refresh');
+                return;
+            }
+            
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Refreshing all sources...',
+                cancellable: false
+            }, async () => {
+                for (const source of sources) {
+                    await sourceManager.syncSource(source.id);
+                }
+            });
             skillBoxProvider.refresh();
+        }),
+
+        // Open Settings
+        vscode.commands.registerCommand('skillbox.openSettings', () => {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'skillbox');
         }),
 
         // Sync Source

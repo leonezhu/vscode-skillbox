@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import simpleGit from 'simple-git';
 import { SourceManager } from '../managers/sourceManager';
-import { Skill, AgentType, InstallScope } from '../types';
+import { Skill, AgentType, InstallScope, InstallMethod } from '../types';
 
 export class SkillInstaller {
     private installRecords: Map<string, InstallRecord> = new Map();
@@ -27,6 +27,7 @@ export class SkillInstaller {
         const config = vscode.workspace.getConfiguration('skillbox');
         const agent = config.get<AgentType>('defaultAgent', 'copilot');
         const scope = config.get<InstallScope>('defaultScope', 'project');
+        const method = config.get<InstallMethod>('installMethod', 'copy');
 
         const targetPath = await this.getTargetPath(skill, agent, scope);
         
@@ -46,8 +47,12 @@ export class SkillInstaller {
                 fs.mkdirSync(targetDir, { recursive: true });
             }
 
-            // 复制 skill 目录
-            await this.copyDirectory(skill.path, targetPath);
+            // 安装 skill
+            if (method === 'symlink') {
+                await this.linkDirectory(skill.path, targetPath);
+            } else {
+                await this.copyDirectory(skill.path, targetPath);
+            }
 
             // 保存安装记录
             await this.saveInstallRecord(skill, targetPath);
@@ -84,6 +89,8 @@ export class SkillInstaller {
                     return path.join(projectRoot, '.agents', 'skills', skill.name);
                 case 'claude':
                     return path.join(projectRoot, '.claude', 'skills', skill.name);
+                case 'cursor':
+                    return path.join(projectRoot, '.cursor', 'skills', skill.name);
                 default:
                     return path.join(projectRoot, '.skills', skill.name);
             }
@@ -99,6 +106,8 @@ export class SkillInstaller {
                     return path.join(homeDir, '.openclaw', 'skills', skill.name);
                 case 'claude':
                     return path.join(homeDir, '.claude', 'skills', skill.name);
+                case 'cursor':
+                    return path.join(homeDir, '.cursor', 'skills', skill.name);
                 default:
                     return path.join(homeDir, '.skills', skill.name);
             }
@@ -113,6 +122,21 @@ export class SkillInstaller {
 
         // 复制目录
         fs.cpSync(src, dest, { recursive: true });
+    }
+
+    private async linkDirectory(src: string, dest: string): Promise<void> {
+        // 如果目标已存在，先删除
+        if (fs.existsSync(dest)) {
+            const stat = fs.lstatSync(dest);
+            if (stat.isSymbolicLink()) {
+                fs.unlinkSync(dest);
+            } else {
+                fs.rmSync(dest, { recursive: true });
+            }
+        }
+
+        // 创建符号链接
+        fs.symlinkSync(src, dest, 'junction');
     }
 
     private async saveInstallRecord(skill: Skill, targetPath: string): Promise<void> {

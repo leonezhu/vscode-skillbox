@@ -5,10 +5,13 @@ export type SourceType = 'github' | 'local';
 export type SkillType = 'skill' | 'instruction';
 
 // Agent 类型
-export type AgentType = 'copilot' | 'openclaw' | 'claude';
+export type AgentType = 'copilot' | 'openclaw' | 'claude' | 'cursor';
 
 // 安装范围
 export type InstallScope = 'project' | 'global';
+
+// 安装方式
+export type InstallMethod = 'copy' | 'symlink';
 
 // 订阅源
 export interface Source {

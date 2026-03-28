@@ -19,6 +19,24 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
 
+    // Update title to show current agent
+    const updateTitle = () => {
+        const config = vscode.workspace.getConfiguration('skillbox');
+        const agent = config.get<AgentType>('defaultAgent', 'copilot');
+        treeView.title = `SKILLBOX [${agent.toUpperCase()}]`;
+    };
+    updateTitle();
+
+    // Listen for config changes
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('skillbox.defaultAgent')) {
+                updateTitle();
+                skillBoxProvider.refresh();
+            }
+        })
+    );
+
     // Register Commands
     context.subscriptions.push(
         treeView,

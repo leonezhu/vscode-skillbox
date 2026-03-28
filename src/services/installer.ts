@@ -156,18 +156,18 @@ export class SkillInstaller {
 
     private getHubPath(skill: Skill, centralRepo: string): string {
         const sourceName = this.sourceManager.getSourceName(skill.sourceId);
-        const prefix = sourceName.replace(/[\/\\]/g, '-');
+        const sourceDir = sourceName.replace(/[\/\\]/g, '-');
 
         if (skill.type === 'special') {
-            return path.join(centralRepo, 'special', `${prefix}-${skill.name.toLowerCase()}`);
+            return path.join(centralRepo, 'special', sourceDir, skill.name.toLowerCase());
         }
         if (skill.type === 'instruction') {
-            return path.join(centralRepo, 'instructions', `${prefix}-${skill.name}.instructions.md`);
+            return path.join(centralRepo, 'instructions', sourceDir, `${skill.name}.instructions.md`);
         }
         if (skill.type === 'agent') {
-            return path.join(centralRepo, 'agents', `${prefix}-${skill.name}.agent.md`);
+            return path.join(centralRepo, 'agents', sourceDir, `${skill.name}.agent.md`);
         }
-        return path.join(centralRepo, 'skills', `${prefix}-${skill.name}`);
+        return path.join(centralRepo, 'skills', sourceDir, skill.name);
     }
 
     // Project scope paths

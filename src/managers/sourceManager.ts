@@ -134,10 +134,14 @@ export class SourceManager {
 
                 if (fs.existsSync(sourceDir)) {
                     const git = simpleGit(sourceDir);
-                    if (source.branch) {
-                        await git.checkout(source.branch);
+                    const branch = source.branch || (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+                    await git.checkout(branch);
+                    try {
+                        await git.pull('origin', branch);
+                    } catch {
+                        await git.fetch('origin');
+                        await git.reset(['--hard', `origin/${branch}`]);
                     }
-                    await git.pull();
                 } else {
                     const cloneOptions = source.branch ? ['--branch', source.branch] : [];
                     await simpleGit().clone(source.url, sourceDir, cloneOptions);

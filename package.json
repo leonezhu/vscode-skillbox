@@ -149,23 +149,13 @@
           "type": "string",
           "enum": ["copilot", "opencode", "claude", "cursor"],
           "enumDescriptions": [
-            "GitHub Copilot - skills to .github/skills",
-            "OpenCode - skills to .agents/skills",
-            "Claude - skills to .claude/skills",
-            "Cursor - skills to .cursor/skills"
+            "GitHub Copilot - project: .github/skills, global: ~/.agents/skills",
+            "OpenCode - project: .agents/skills, global: ~/.agents/skills",
+            "Claude - project: .claude/skills, global: ~/.claude/skills",
+            "Cursor - project: .cursor/skills, global: ~/.cursor/skills"
           ],
           "default": "copilot",
           "description": "Default agent type for skill installation"
-        },
-        "skillbox.defaultScope": {
-          "type": "string",
-          "enum": ["project", "global"],
-          "enumDescriptions": [
-            "Install to current workspace",
-            "Install to user home directory"
-          ],
-          "default": "project",
-          "description": "Default installation scope"
         },
         "skillbox.installMethod": {
           "type": "string",

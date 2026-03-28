@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
@@ -73,6 +75,28 @@ export function activate(context: vscode.ExtensionContext) {
                     await sourceManager.syncSource(node.source.id);
                 });
                 skillBoxProvider.refresh();
+            }
+        }),
+
+        // Open Source
+        vscode.commands.registerCommand('skillbox.openSource', async (node) => {
+            if (node?.source) {
+                const source = node.source;
+                if (source.type === 'github') {
+                    // 用浏览器打开 GitHub 仓库
+                    const url = source.url.startsWith('git@') 
+                        ? source.url.replace(/git@([^:]+):(.+)/, 'https://$1/$2').replace(/\.git$/, '')
+                        : source.url.replace(/\.git$/, '');
+                    vscode.env.openExternal(vscode.Uri.parse(url));
+                } else {
+                    // 用文件管理器打开本地路径
+                    const sourcePath = sourceManager.getSourcePath(source.id);
+                    if (fs.existsSync(sourcePath)) {
+                        vscode.env.openExternal(vscode.Uri.file(sourcePath));
+                    } else {
+                        vscode.window.showErrorMessage(`Source path does not exist: ${sourcePath}`);
+                    }
+                }
             }
         }),
 

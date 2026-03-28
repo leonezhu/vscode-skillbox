@@ -48,6 +48,10 @@
         "title": "Sync This Source"
       },
       {
+        "command": "skillbox.openSource",
+        "title": "Open"
+      },
+      {
         "command": "skillbox.removeSource",
         "title": "Remove This Source"
       },
@@ -67,6 +71,10 @@
       {
         "command": "skillbox.uninstallSkill",
         "title": "Uninstall"
+      },
+      {
+        "command": "skillbox.openSource",
+        "title": "Open"
       }
     ],
     "menus": {
@@ -94,9 +102,14 @@
           "group": "1_sync"
         },
         {
+          "command": "skillbox.openSource",
+          "when": "view == skillbox.sources && viewItem == source",
+          "group": "2_open"
+        },
+        {
           "command": "skillbox.removeSource",
           "when": "view == skillbox.sources && viewItem == source",
-          "group": "2_manage"
+          "group": "3_manage"
         },
         {
           "command": "skillbox.installSkill",

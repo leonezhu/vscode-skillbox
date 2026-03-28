@@ -156,16 +156,6 @@
           ],
           "default": "copilot",
           "description": "Default agent type for skill installation"
-        },
-        "skillbox.installMethod": {
-          "type": "string",
-          "enum": ["copy", "symlink"],
-          "enumDescriptions": [
-            "Copy skill files to target location",
-            "Create symbolic link (requires admin privileges on some systems)"
-          ],
-          "default": "copy",
-          "description": "Method for installing skills"
         }
       }
     }

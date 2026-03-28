@@ -37,10 +37,7 @@ export class SkillInstaller {
         }
     }
 
-    async installToPath(skill: Skill, targetPath: string): Promise<void> {
-        const config = vscode.workspace.getConfiguration('skillbox');
-        const method = config.get<InstallMethod>('installMethod', 'copy');
-
+    async installToPath(skill: Skill, targetPath: string, method: InstallMethod = 'copy'): Promise<void> {
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: `Installing ${skill.name}...`,

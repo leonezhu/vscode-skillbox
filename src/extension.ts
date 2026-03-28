@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
-import { AgentType } from './types';
+import { AgentType, InstallMethod } from './types';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('SkillBox is now active!');
@@ -168,7 +168,19 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!picked) {return;}
                 
                 const targetPath = picked.detail!;
-                await installer.installToPath(skill, targetPath);
+                
+                // 选择安装方式
+                const methodItems: vscode.QuickPickItem[] = [
+                    { label: 'Copy', description: 'Copy files to target location' },
+                    { label: 'Symlink', description: 'Create symbolic link' }
+                ];
+                const methodPicked = await vscode.window.showQuickPick(methodItems, {
+                    placeHolder: 'Installation method?'
+                });
+                if (!methodPicked) {return;}
+                
+                const method: InstallMethod = methodPicked.label.toLowerCase() as InstallMethod;
+                await installer.installToPath(skill, targetPath, method);
                 skillBoxProvider.refresh();
             }
         }),

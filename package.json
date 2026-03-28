@@ -2,7 +2,7 @@
   "name": "skillbox",
   "displayName": "SkillBox",
   "description": "VSCode extension for managing Agent Skills from subscription sources",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "publisher": "leonezhu",
   "license": "MIT",
   "repository": {
@@ -73,6 +73,10 @@
         "title": "Install"
       },
       {
+        "command": "skillbox.openSkillFile",
+        "title": "View"
+      },
+      {
         "command": "skillbox.updateSkill",
         "title": "Update"
       },
@@ -133,6 +137,11 @@
           "command": "skillbox.installSkill",
           "when": "viewItem == skill",
           "group": "1_install"
+        },
+        {
+          "command": "skillbox.openSkillFile",
+          "when": "viewItem == skill || viewItem == skill-installed || viewItem == skill-has-update",
+          "group": "1_install@2"
         },
         {
           "command": "skillbox.updateSkill",

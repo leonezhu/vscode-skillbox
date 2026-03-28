@@ -237,6 +237,22 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }),
 
+        // View Skill File
+        vscode.commands.registerCommand('skillbox.openSkillFile', async (node) => {
+            if (node?.skill) {
+                const skill = node.skill;
+                const filePath = skill.type === 'skill'
+                    ? path.join(skill.path, 'SKILL.md')
+                    : skill.path;
+                if (fs.existsSync(filePath)) {
+                    const doc = await vscode.workspace.openTextDocument(filePath);
+                    await vscode.window.showTextDocument(doc, { preview: true });
+                } else {
+                    vscode.window.showWarningMessage(`File not found: ${filePath}`);
+                }
+            }
+        }),
+
         // Install Skill
         vscode.commands.registerCommand('skillbox.installSkill', async (node) => {
             if (node?.skill) {

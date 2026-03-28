@@ -28,11 +28,13 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
                     source.name,
                     vscode.TreeItemCollapsibleState.Collapsed
                 );
-                const branchInfo = source.branch ? ` (${source.branch})` : '';
+                const branchInfo = source.branch ? ` (branch: ${source.branch})` : '';
                 item.tooltip = `${source.url}${branchInfo}`;
-                item.description = source.lastSync 
-                    ? `Last sync: ${new Date(source.lastSync).toLocaleString()}`
-                    : 'Not synced';
+                item.description = source.branch 
+                    ? `branch: ${source.branch}`
+                    : (source.lastSync 
+                        ? `Last sync: ${new Date(source.lastSync).toLocaleString()}`
+                        : 'Not synced');
                 item.contextValue = 'source';
                 item.iconPath = new vscode.ThemeIcon('folder');
                 (item as any).source = source;

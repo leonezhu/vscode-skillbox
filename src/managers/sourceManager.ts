@@ -28,15 +28,16 @@ export class SourceManager {
 
     async addSource(url: string, branch?: string): Promise<Source> {
         const id = crypto.randomUUID();
-        const type: SourceType = url.startsWith('http') ? 'github' : 'local';
+        const type: SourceType = url.startsWith('http') || url.startsWith('git@') ? 'github' : 'local';
         
-        // 解析仓库名称 (owner/repo 格式)
+        // 解析仓库名称
         let name: string;
         if (type === 'github') {
             const match = url.match(/github\.com[/:]([^/]+\/[^/]+)/);
             name = match ? match[1].replace(/\.git$/, '') : path.basename(url.replace(/\.git$/, ''));
         } else {
-            name = path.basename(url);
+            // 本地仓库使用 local/folder-name 格式
+            name = `local/${path.basename(url)}`;
         }
 
         const source: Source = { id, url, type, name, branch };
@@ -62,32 +63,43 @@ export class SourceManager {
         const centralRepo = this.getCentralRepo();
         const sourceDir = path.join(centralRepo, id);
 
-        if (source.type === 'github') {
-            // Clone 或 pull
-            if (fs.existsSync(sourceDir)) {
-                const git = simpleGit(sourceDir);
-                if (source.branch) {
-                    await git.checkout(source.branch);
+        try {
+            if (source.type === 'github') {
+                // Clone 或 pull
+                if (fs.existsSync(sourceDir)) {
+                    const git = simpleGit(sourceDir);
+                    if (source.branch) {
+                        await git.checkout(source.branch);
+                    }
+                    await git.pull();
+                } else {
+                    const cloneOptions = source.branch ? ['--branch', source.branch] : [];
+                    await simpleGit().clone(source.url, sourceDir, cloneOptions);
                 }
-                await git.pull();
             } else {
-                const cloneOptions = source.branch ? ['--branch', source.branch] : [];
-                await simpleGit().clone(source.url, sourceDir, cloneOptions);
+                // 本地源 - 创建符号链接或复制
+                if (!fs.existsSync(sourceDir)) {
+                    // 检查原始路径是否存在
+                    if (!fs.existsSync(source.url)) {
+                        vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
+                        return;
+                    }
+                    fs.symlinkSync(source.url, sourceDir, 'junction');
+                }
             }
-        } else {
-            // 本地源 - 创建符号链接或复制
-            if (!fs.existsSync(sourceDir)) {
-                fs.symlinkSync(source.url, sourceDir, 'junction');
-            }
+
+            // 扫描 skills
+            const skills = this.scanSkills(sourceDir, id);
+            this.skills.set(id, skills);
+
+            // 更新同步时间
+            source.lastSync = new Date().toISOString();
+            await this.saveSources();
+            
+            vscode.window.showInformationMessage(`Synced ${source.name}: ${skills.length} skills found`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to sync ${source.name}: ${error}`);
         }
-
-        // 扫描 skills
-        const skills = this.scanSkills(sourceDir, id);
-        this.skills.set(id, skills);
-
-        // 更新同步时间
-        source.lastSync = new Date().toISOString();
-        await this.saveSources();
     }
 
     private scanSkills(dir: string, sourceId: string): Skill[] {

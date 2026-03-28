@@ -31,7 +31,7 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
                 const branchInfo = source.branch ? ` (branch: ${source.branch})` : '';
                 item.tooltip = `${source.url}${branchInfo}`;
                 item.description = source.branch 
-                    ? `branch: ${source.branch}`
+                    ? source.branch
                     : (source.lastSync 
                         ? `Last sync: ${new Date(source.lastSync).toLocaleString()}`
                         : 'Not synced');

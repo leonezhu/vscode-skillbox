@@ -42,10 +42,42 @@ export class SourceManager {
         await this.context.globalState.update('skills', skillsObj);
     }
 
+    getCentralRepo(): string {
+        const config = vscode.workspace.getConfiguration('skillbox');
+        let centralRepo = config.get<string>('centralRepo');
+
+        if (!centralRepo) {
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (homeDir) {
+                centralRepo = path.join(homeDir, '.skillbox');
+            } else {
+                centralRepo = path.join(this.context.globalStorageUri.fsPath, 'skills');
+            }
+        } else if (centralRepo.startsWith('~')) {
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (homeDir) {
+                centralRepo = path.join(homeDir, centralRepo.substring(1));
+            }
+        }
+
+        if (!fs.existsSync(centralRepo)) {
+            fs.mkdirSync(centralRepo, { recursive: true });
+        }
+
+        return centralRepo;
+    }
+
+    getCacheDir(): string {
+        const cacheDir = path.join(this.getCentralRepo(), '.cache');
+        if (!fs.existsSync(cacheDir)) {
+            fs.mkdirSync(cacheDir, { recursive: true });
+        }
+        return cacheDir;
+    }
+
     async addSource(url: string, branch?: string): Promise<Source> {
         const id = crypto.randomUUID();
-        
-        // 支持3种格式：URL、git https、git ssh
+
         let type: SourceType = 'github';
         if (url.startsWith('git@') || url.startsWith('git://')) {
             type = 'github';
@@ -54,18 +86,12 @@ export class SourceManager {
         } else {
             type = 'local';
         }
-        
-        // 解析仓库名称
+
         let name: string;
         if (type === 'github') {
-            // 匹配多种格式：
-            // https://github.com/owner/repo
-            // git@github.com:owner/repo.git
-            // git://github.com/owner/repo.git
             const match = url.match(/github\.com[/:]([^/]+\/[^/]+)/);
             name = match ? match[1].replace(/\.git$/, '') : path.basename(url.replace(/\.git$/, ''));
         } else {
-            // 本地仓库使用 local/folder-name 格式
             name = `local/${path.basename(url)}`;
         }
 
@@ -73,13 +99,21 @@ export class SourceManager {
         this.sources.set(id, source);
         await this.saveSources();
 
-        // 同步并扫描 skills
         await this.syncSource(id);
 
         return source;
     }
 
     async removeSource(id: string): Promise<void> {
+        const source = this.sources.get(id);
+        if (source && source.type === 'github') {
+            // 删除缓存
+            const cachePath = path.join(this.getCacheDir(), id);
+            if (fs.existsSync(cachePath)) {
+                fs.rmSync(cachePath, { recursive: true });
+            }
+        }
+
         this.sources.delete(id);
         this.skills.delete(id);
         await this.saveSources();
@@ -88,14 +122,16 @@ export class SourceManager {
 
     async syncSource(id: string): Promise<void> {
         const source = this.sources.get(id);
-        if (!source) {return;}
-
-        const centralRepo = this.getCentralRepo();
-        const sourceDir = path.join(centralRepo, id);
+        if (!source) { return; }
 
         try {
+            let sourceDir: string;
+
             if (source.type === 'github') {
-                // Clone 或 pull
+                // 远程源：clone/pull 到 .cache/
+                const cacheDir = this.getCacheDir();
+                sourceDir = path.join(cacheDir, id);
+
                 if (fs.existsSync(sourceDir)) {
                     const git = simpleGit(sourceDir);
                     if (source.branch) {
@@ -107,26 +143,21 @@ export class SourceManager {
                     await simpleGit().clone(source.url, sourceDir, cloneOptions);
                 }
             } else {
-                // 本地源 - 创建符号链接或复制
+                // 本地源：直接读取，不缓存
+                sourceDir = source.url;
                 if (!fs.existsSync(sourceDir)) {
-                    // 检查原始路径是否存在
-                    if (!fs.existsSync(source.url)) {
-                        vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
-                        return;
-                    }
-                    fs.symlinkSync(source.url, sourceDir, 'junction');
+                    vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
+                    return;
                 }
             }
 
-            // 扫描 skills
             const skills = this.scanSkills(sourceDir, id);
             this.skills.set(id, skills);
             await this.saveSkills();
 
-            // 更新同步时间
             source.lastSync = new Date().toISOString();
             await this.saveSources();
-            
+
             vscode.window.showInformationMessage(`Synced ${source.name}: ${skills.length} resources found`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to sync ${source.name}: ${error}`);
@@ -135,8 +166,8 @@ export class SourceManager {
 
     private scanSkills(dir: string, sourceId: string): Skill[] {
         const skills: Skill[] = [];
-        
-        // 1. 扫描 skills/ 目录 - 包含 SKILL.md 的目录
+
+        // 1. Scan skills/ directory
         const skillsDir = path.join(dir, 'skills');
         if (fs.existsSync(skillsDir)) {
             fs.readdirSync(skillsDir, { withFileTypes: true })
@@ -144,11 +175,11 @@ export class SourceManager {
                 .forEach(d => {
                     const skillPath = path.join(skillsDir, d.name);
                     const skill = this.parseSkillDir(skillPath, d.name, 'skill', sourceId);
-                    if (skill) {skills.push(skill);}
+                    if (skill) { skills.push(skill); }
                 });
         }
 
-        // 2. 扫描 instructions/ 目录 - .instructions.md 文件
+        // 2. Scan instructions/ directory
         const instructionsDir = path.join(dir, 'instructions');
         if (fs.existsSync(instructionsDir)) {
             fs.readdirSync(instructionsDir)
@@ -156,11 +187,11 @@ export class SourceManager {
                 .forEach(f => {
                     const instructionPath = path.join(instructionsDir, f);
                     const skill = this.parseInstructionFile(instructionPath, f, 'instruction', sourceId);
-                    if (skill) {skills.push(skill);}
+                    if (skill) { skills.push(skill); }
                 });
         }
 
-        // 3. 扫描 agents/ 目录 - .agent.md 文件
+        // 3. Scan agents/ directory
         const agentsDir = path.join(dir, 'agents');
         if (fs.existsSync(agentsDir)) {
             fs.readdirSync(agentsDir)
@@ -168,21 +199,21 @@ export class SourceManager {
                 .forEach(f => {
                     const agentPath = path.join(agentsDir, f);
                     const skill = this.parseInstructionFile(agentPath, f, 'agent', sourceId);
-                    if (skill) {skills.push(skill);}
+                    if (skill) { skills.push(skill); }
                 });
         }
 
-        // 4. 扫描特殊文件（copilot-instructions.md, AGENT.md, CLAUDE.md）
+        // 4. Scan special files
         const specialFiles = ['copilot-instructions.md', 'AGENT.md', 'CLAUDE.md'];
         for (const specialFile of specialFiles) {
             const specialPath = path.join(dir, specialFile);
             if (fs.existsSync(specialPath)) {
                 const skill = this.parseInstructionFile(specialPath, specialFile, 'special', sourceId);
-                if (skill) {skills.push(skill);}
+                if (skill) { skills.push(skill); }
             }
         }
 
-        // 5. 递归查找其他位置的 SKILL.md 文件
+        // 5. Recursively find SKILL.md files
         this.findSkillFiles(dir, sourceId, skills);
 
         return skills;
@@ -191,7 +222,7 @@ export class SourceManager {
     private parseSkillDir(dir: string, name: string, type: SkillType, sourceId: string): Skill | null {
         const skillFile = path.join(dir, 'SKILL.md');
         let description = '';
-        
+
         if (fs.existsSync(skillFile)) {
             const content = fs.readFileSync(skillFile, 'utf-8');
             const descMatch = content.match(/##\s*Description\s*\n+(.+?)(?=\n##|$)/s);
@@ -210,19 +241,16 @@ export class SourceManager {
 
     private parseInstructionFile(filePath: string, filename: string, type: SkillType, sourceId: string): Skill | null {
         const content = fs.readFileSync(filePath, 'utf-8');
-        
-        // 从文件名提取名称（去掉后缀）
+
         let name = filename;
         if (type === 'instruction') {
             name = filename.replace(/\.instructions\.md$/, '');
         } else if (type === 'agent') {
             name = filename.replace(/\.agent\.md$/, '');
         } else if (type === 'special') {
-            // 特殊文件保留原名
             name = filename;
         }
 
-        // 尝试从内容中提取描述（第一段非标题内容）
         const lines = content.split('\n');
         let description = '';
         for (const line of lines) {
@@ -244,19 +272,17 @@ export class SourceManager {
     }
 
     private findSkillFiles(dir: string, sourceId: string, skills: Skill[]) {
-        // 忽略已处理的目录
-        const ignoreDirs = ['node_modules', '.git', 'out', 'dist', 'build', 'skills', 'instructions', 'agents', 'workflows'];
-        
+        const ignoreDirs = ['node_modules', '.git', 'out', 'dist', 'build', 'skills', 'instructions', 'agents', 'workflows', '.cache'];
+
         const scanDirectory = (currentDir: string) => {
             try {
                 const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-                
+
                 for (const entry of entries) {
                     if (entry.isDirectory()) {
-                        if (ignoreDirs.includes(entry.name)) {continue;}
+                        if (ignoreDirs.includes(entry.name)) { continue; }
                         scanDirectory(path.join(currentDir, entry.name));
                     } else if (entry.name === 'SKILL.md') {
-                        // 找到 SKILL.md，解析这个目录
                         const skillDir = path.dirname(path.join(currentDir, entry.name));
                         const skillName = path.basename(skillDir);
                         const skill = this.parseSkillDir(skillDir, skillName, 'skill', sourceId);
@@ -266,7 +292,7 @@ export class SourceManager {
                     }
                 }
             } catch {
-                // 忽略无权限目录
+                // ignore
             }
         };
 
@@ -286,35 +312,16 @@ export class SourceManager {
     }
 
     getSourcePath(sourceId: string): string {
-        const centralRepo = this.getCentralRepo();
-        return path.join(centralRepo, sourceId);
+        const source = this.sources.get(sourceId);
+        if (!source) { return ''; }
+
+        if (source.type === 'local') {
+            return source.url;
+        }
+        return path.join(this.getCacheDir(), sourceId);
     }
 
-    private getCentralRepo(): string {
-        const config = vscode.workspace.getConfiguration('skillbox');
-        let centralRepo = config.get<string>('centralRepo');
-        
-        if (!centralRepo) {
-            // 默认使用 ~/.skillbox/
-            const homeDir = process.env.HOME || process.env.USERPROFILE;
-            if (homeDir) {
-                centralRepo = path.join(homeDir, '.skillbox');
-            } else {
-                centralRepo = path.join(this.context.globalStorageUri.fsPath, 'skills');
-            }
-        } else if (centralRepo.startsWith('~')) {
-            // 展开 ~ 为 home 目录
-            const homeDir = process.env.HOME || process.env.USERPROFILE;
-            if (homeDir) {
-                centralRepo = path.join(homeDir, centralRepo.substring(1));
-            }
-        }
-        
-        // 确保目录存在
-        if (!fs.existsSync(centralRepo)) {
-            fs.mkdirSync(centralRepo, { recursive: true });
-        }
-        
-        return centralRepo;
+    getSourceName(sourceId: string): string {
+        return this.sources.get(sourceId)?.name || '';
     }
 }

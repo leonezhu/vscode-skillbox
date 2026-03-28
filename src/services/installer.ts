@@ -31,9 +31,9 @@ export class SkillInstaller {
             const projectRoot = workspaceFolders[0].uri.fsPath;
             return this.resolveProjectPath(skill, agent, projectRoot);
         } else {
-            const homeDir = process.env.HOME || process.env.USERPROFILE;
-            if (!homeDir) { return null; }
-            return this.resolveGlobalPath(skill, agent, homeDir);
+            // Global installs go to ~/.skillbox/ (the central hub)
+            const centralRepo = this.sourceManager.getCentralRepo();
+            return this.resolveGlobalPath(skill, agent, centralRepo);
         }
     }
 
@@ -73,12 +73,10 @@ export class SkillInstaller {
     }
 
     isInstalled(skill: Skill): boolean {
-        // 先检查安装记录中的实际路径
         const record = this.installRecords.get(skill.id);
         if (record?.targetPath && fs.existsSync(record.targetPath)) {
             return true;
         }
-        // 回退：检查当前 agent 的项目路径
         const projectPath = this.getProjectSkillPath(skill);
         if (projectPath && fs.existsSync(projectPath)) {
             return true;
@@ -117,14 +115,12 @@ export class SkillInstaller {
     }
 
     async uninstall(skill: Skill): Promise<void> {
-        // 先尝试安装记录中的实际路径
         const record = this.installRecords.get(skill.id);
         let removePath: string | null = null;
 
         if (record?.targetPath && fs.existsSync(record.targetPath)) {
             removePath = record.targetPath;
         } else {
-            // 回退：检查当前 agent 的项目路径
             const projectPath = this.getProjectSkillPath(skill);
             if (projectPath && fs.existsSync(projectPath)) {
                 removePath = projectPath;
@@ -144,7 +140,7 @@ export class SkillInstaller {
         vscode.window.showInformationMessage(`${skill.name} uninstalled successfully!`);
     }
 
-    // Project scope: copilot uses .github, others use their own dirs
+    // Project scope paths
     private resolveProjectPath(skill: Skill, agent: AgentType, basePath: string): string {
         if (skill.type === 'special') {
             if (skill.name === 'copilot-instructions.md') {
@@ -172,28 +168,27 @@ export class SkillInstaller {
         return path.join(basePath, '.skills', skill.name);
     }
 
-    // Global scope: copilot and opencode share ~/.agents/
-    private resolveGlobalPath(skill: Skill, agent: AgentType, homeDir: string): string {
+    // Global scope: all go to ~/.skillbox/ (the central hub)
+    private resolveGlobalPath(skill: Skill, agent: AgentType, centralRepo: string): string {
         if (skill.type === 'special') {
-            if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
-                return path.join(homeDir, skill.name);
+            // Special files get {source-prefix} to avoid collisions
+            const sourceName = this.sourceManager.getSourceName(skill.sourceId);
+            const prefix = sourceName.replace(/[\/\\]/g, '-');
+            if (skill.name === 'copilot-instructions.md') {
+                return path.join(centralRepo, 'special', `${prefix}-copilot-instructions.md`);
+            } else if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
+                return path.join(centralRepo, 'special', `${prefix}-${skill.name.toLowerCase()}`);
             }
         }
 
         if (skill.type === 'instruction') {
-            return path.join(homeDir, '.agents', 'instructions', `${skill.name}.instructions.md`);
+            return path.join(centralRepo, 'instructions', `${skill.name}.instructions.md`);
         } else if (skill.type === 'agent') {
-            return path.join(homeDir, '.agents', 'agents', `${skill.name}.agent.md`);
+            return path.join(centralRepo, 'agents', `${skill.name}.agent.md`);
         }
 
-        if (agent === 'copilot' || agent === 'opencode') {
-            return path.join(homeDir, '.agents', 'skills', skill.name);
-        } else if (agent === 'claude') {
-            return path.join(homeDir, '.claude', 'skills', skill.name);
-        } else if (agent === 'cursor') {
-            return path.join(homeDir, '.cursor', 'skills', skill.name);
-        }
-        return path.join(homeDir, '.skills', skill.name);
+        // Skills
+        return path.join(centralRepo, 'skills', skill.name);
     }
 
     private async copyDirectory(src: string, dest: string): Promise<void> {

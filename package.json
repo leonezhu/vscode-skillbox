@@ -1,0 +1,140 @@
+{
+  "name": "skillbox",
+  "displayName": "SkillBox",
+  "description": "VSCode extension for managing Agent Skills from subscription sources",
+  "version": "0.0.1",
+  "publisher": "leonezhu",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:skillbox"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "skillbox",
+          "title": "SkillBox",
+          "icon": "resources/skillbox.svg"
+        }
+      ]
+    },
+    "views": {
+      "skillbox": [
+        {
+          "id": "skillbox.sources",
+          "name": "订阅源"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "skillbox.addSource",
+        "title": "添加订阅源",
+        "icon": "$(add)"
+      },
+      {
+        "command": "skillbox.refreshSources",
+        "title": "刷新订阅源",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "skillbox.syncSource",
+        "title": "同步此订阅源"
+      },
+      {
+        "command": "skillbox.removeSource",
+        "title": "移除此订阅源"
+      },
+      {
+        "command": "skillbox.installSkill",
+        "title": "安装 Skill"
+      },
+      {
+        "command": "skillbox.updateSkill",
+        "title": "更新 Skill"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "skillbox.addSource",
+          "when": "view == skillbox.sources",
+          "group": "navigation"
+        },
+        {
+          "command": "skillbox.refreshSources",
+          "when": "view == skillbox.sources",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "skillbox.syncSource",
+          "when": "view == skillbox.sources && viewItem == source",
+          "group": "1_sync"
+        },
+        {
+          "command": "skillbox.removeSource",
+          "when": "view == skillbox.sources && viewItem == source",
+          "group": "2_manage"
+        },
+        {
+          "command": "skillbox.installSkill",
+          "when": "viewItem == skill",
+          "group": "1_install"
+        },
+        {
+          "command": "skillbox.updateSkill",
+          "when": "viewItem == skill-installed",
+          "group": "1_update"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SkillBox",
+      "properties": {
+        "skillbox.centralRepo": {
+          "type": "string",
+          "default": "",
+          "description": "集中安装目录路径"
+        },
+        "skillbox.defaultAgent": {
+          "type": "string",
+          "enum": ["copilot", "openclaw", "claude"],
+          "default": "copilot",
+          "description": "默认 Agent 类型"
+        },
+        "skillbox.defaultScope": {
+          "type": "string",
+          "enum": ["project", "global"],
+          "default": "project",
+          "description": "默认安装范围"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "yarn run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.x",
+    "@typescript-eslint/parser": "^7.x",
+    "eslint": "^8.x",
+    "typescript": "^5.x"
+  },
+  "dependencies": {
+    "simple-git": "^3.x"
+  }
+}

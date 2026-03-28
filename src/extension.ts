@@ -104,6 +104,20 @@ export function activate(context: vscode.ExtensionContext) {
                 await installer.update(node.skill);
                 skillBoxProvider.refresh();
             }
+        }),
+
+        // Uninstall Skill
+        vscode.commands.registerCommand('skillbox.uninstallSkill', async (node) => {
+            if (node?.skill) {
+                const confirm = await vscode.window.showWarningMessage(
+                    `Uninstall ${node.skill.name}?`,
+                    'Yes', 'No'
+                );
+                if (confirm === 'Yes') {
+                    await installer.uninstall(node.skill);
+                    skillBoxProvider.refresh();
+                }
+            }
         })
     );
 }

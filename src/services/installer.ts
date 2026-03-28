@@ -67,7 +67,65 @@ export class SkillInstaller {
     }
 
     isInstalled(skill: Skill): boolean {
+        // 检查项目目录中是否存在
+        const projectPath = this.getProjectSkillPath(skill);
+        if (projectPath && fs.existsSync(projectPath)) {
+            return true;
+        }
         return this.installRecords.has(skill.id);
+    }
+
+    hasUpdate(skill: Skill): boolean {
+        // 暂时返回 false，更新检查需要异步实现
+        // 可以在后续版本中添加
+        return false;
+    }
+
+    getProjectSkillPath(skill: Skill): string | null {
+        const config = vscode.workspace.getConfiguration('skillbox');
+        const agent = config.get<AgentType>('defaultAgent', 'copilot');
+        const scope = config.get<InstallScope>('defaultScope', 'project');
+
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        
+        if (scope === 'project') {
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                return null;
+            }
+            const projectRoot = workspaceFolders[0].uri.fsPath;
+            
+            switch (agent) {
+                case 'copilot':
+                    return path.join(projectRoot, '.github', 'skills', skill.name);
+                case 'opencode':
+                    return path.join(projectRoot, '.agents', 'skills', skill.name);
+                case 'claude':
+                    return path.join(projectRoot, '.claude', 'skills', skill.name);
+                case 'cursor':
+                    return path.join(projectRoot, '.cursor', 'skills', skill.name);
+                default:
+                    return path.join(projectRoot, '.skills', skill.name);
+            }
+        }
+        return null;
+    }
+
+    async uninstall(skill: Skill): Promise<void> {
+        const projectPath = this.getProjectSkillPath(skill);
+        
+        if (!projectPath || !fs.existsSync(projectPath)) {
+            vscode.window.showWarningMessage(`${skill.name} is not installed in current project`);
+            return;
+        }
+
+        // 删除目录
+        fs.rmSync(projectPath, { recursive: true });
+        
+        // 删除记录
+        this.installRecords.delete(skill.id);
+        await this.saveInstallRecords();
+
+        vscode.window.showInformationMessage(`${skill.name} uninstalled successfully!`);
     }
 
     private async getTargetPath(skill: Skill, agent: AgentType, scope: InstallScope): Promise<string | null> {

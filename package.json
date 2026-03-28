@@ -63,6 +63,10 @@
         "command": "skillbox.openSettings",
         "title": "Open Settings",
         "icon": "$(gear)"
+      },
+      {
+        "command": "skillbox.uninstallSkill",
+        "title": "Uninstall Skill"
       }
     ],
     "menus": {
@@ -101,8 +105,13 @@
         },
         {
           "command": "skillbox.updateSkill",
-          "when": "viewItem == skill-installed",
+          "when": "viewItem == skill-has-update",
           "group": "1_update"
+        },
+        {
+          "command": "skillbox.uninstallSkill",
+          "when": "viewItem == skill-installed || viewItem == skill-has-update",
+          "group": "2_uninstall"
         }
       ]
     },
@@ -111,8 +120,8 @@
       "properties": {
         "skillbox.centralRepo": {
           "type": "string",
-          "default": "",
-          "description": "Central repository path for storing synced skills (leave empty to use VSCode global storage)"
+          "default": "~/.skillbox",
+          "description": "Central repository path for storing synced skills (default: ~/.skillbox)"
         },
         "skillbox.defaultAgent": {
           "type": "string",

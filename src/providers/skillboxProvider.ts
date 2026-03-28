@@ -48,16 +48,29 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             const skills = this.sourceManager.getSkills(source.id);
             return skills.map(skill => {
                 const isInstalled = this.installer.isInstalled(skill);
+                const hasUpdate = isInstalled && this.installer.hasUpdate(skill);
+                
                 const item = new vscode.TreeItem(
                     skill.name,
                     vscode.TreeItemCollapsibleState.None
                 );
-                item.tooltip = skill.description;
+                item.tooltip = skill.description || skill.name;
                 item.description = skill.type === 'instruction' ? '(instruction)' : '';
-                item.contextValue = isInstalled ? 'skill-installed' : 'skill';
-                item.iconPath = new vscode.ThemeIcon(
-                    isInstalled ? 'check' : 'cloud-download'
-                );
+                
+                // 设置 contextValue 用于右键菜单
+                if (hasUpdate) {
+                    item.contextValue = 'skill-has-update';
+                    item.iconPath = new vscode.ThemeIcon('sync');
+                    item.description = '⬆ Update available';
+                } else if (isInstalled) {
+                    item.contextValue = 'skill-installed';
+                    item.iconPath = new vscode.ThemeIcon('check');
+                    item.description = 'Installed';
+                } else {
+                    item.contextValue = 'skill';
+                    item.iconPath = new vscode.ThemeIcon('cloud-download');
+                }
+                
                 (item as any).skill = skill;
                 (item as any).source = source;
                 return item;

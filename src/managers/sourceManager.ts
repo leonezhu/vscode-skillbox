@@ -237,7 +237,14 @@ export class SourceManager {
         let centralRepo = config.get<string>('centralRepo');
         
         if (!centralRepo) {
-            centralRepo = path.join(this.context.globalStorageUri.fsPath, 'skills');
+            // 默认使用 ~/.skillbox/
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (homeDir) {
+                centralRepo = path.join(homeDir, '.skillbox');
+            } else {
+                centralRepo = path.join(this.context.globalStorageUri.fsPath, 'skills');
+            }
+            
             if (!fs.existsSync(centralRepo)) {
                 fs.mkdirSync(centralRepo, { recursive: true });
             }

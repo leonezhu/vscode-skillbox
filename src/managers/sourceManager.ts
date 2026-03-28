@@ -44,11 +44,24 @@ export class SourceManager {
 
     async addSource(url: string, branch?: string): Promise<Source> {
         const id = crypto.randomUUID();
-        const type: SourceType = url.startsWith('http') || url.startsWith('git@') ? 'github' : 'local';
+        
+        // 支持3种格式：URL、git https、git ssh
+        let type: SourceType = 'github';
+        if (url.startsWith('git@') || url.startsWith('git://')) {
+            type = 'github';
+        } else if (url.startsWith('http://') || url.startsWith('https://')) {
+            type = 'github';
+        } else {
+            type = 'local';
+        }
         
         // 解析仓库名称
         let name: string;
         if (type === 'github') {
+            // 匹配多种格式：
+            // https://github.com/owner/repo
+            // git@github.com:owner/repo.git
+            // git://github.com/owner/repo.git
             const match = url.match(/github\.com[/:]([^/]+\/[^/]+)/);
             name = match ? match[1].replace(/\.git$/, '') : path.basename(url.replace(/\.git$/, ''));
         } else {

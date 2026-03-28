@@ -111,7 +111,7 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             'skill': 'package',
             'instruction': 'book',
             'agent': 'hubot',
-            'workflow': 'workflow'
+            'workflow': 'combine'  // 使用 combine 作为 workflow 图标
         };
         return icons[type] || 'file';
     }

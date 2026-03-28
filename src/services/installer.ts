@@ -104,18 +104,18 @@ export class SkillInstaller {
             }
             const projectRoot = workspaceFolders[0].uri.fsPath;
             
-            // 根据目标 agent 和资源类型确定路径
+            // instruction/agent/workflow 固定安装到 .github 目录（Copilot 专属）
+            if (skill.type === 'instruction') {
+                return path.join(projectRoot, '.github', 'instructions', `${skill.name}.instructions.md`);
+            } else if (skill.type === 'agent') {
+                return path.join(projectRoot, '.github', 'agents', `${skill.name}.agent.md`);
+            } else if (skill.type === 'workflow') {
+                return path.join(projectRoot, '.github', 'prompts', 'workflows', `${skill.name}.md`);
+            }
+            
+            // skills 根据 agent 类型安装到不同位置
             if (agent === 'copilot') {
-                switch (skill.type) {
-                    case 'skill':
-                        return path.join(projectRoot, '.github', 'skills', skill.name);
-                    case 'instruction':
-                        return path.join(projectRoot, '.github', 'instructions', `${skill.name}.instructions.md`);
-                    case 'agent':
-                        return path.join(projectRoot, '.github', 'agents', `${skill.name}.agent.md`);
-                    case 'workflow':
-                        return path.join(projectRoot, '.github', 'prompts', 'workflows', `${skill.name}.md`);
-                }
+                return path.join(projectRoot, '.github', 'skills', skill.name);
             } else if (agent === 'opencode') {
                 return path.join(projectRoot, '.agents', 'skills', skill.name);
             } else if (agent === 'claude') {

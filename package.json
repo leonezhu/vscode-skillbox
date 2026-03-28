@@ -28,7 +28,7 @@
       "skillbox": [
         {
           "id": "skillbox.sources",
-          "name": "Sources"
+          "name": ""
         }
       ]
     },
@@ -53,11 +53,11 @@
       },
       {
         "command": "skillbox.installSkill",
-        "title": "Install Skill"
+        "title": "Install"
       },
       {
         "command": "skillbox.updateSkill",
-        "title": "Update Skill"
+        "title": "Update"
       },
       {
         "command": "skillbox.openSettings",
@@ -66,7 +66,7 @@
       },
       {
         "command": "skillbox.uninstallSkill",
-        "title": "Uninstall Skill"
+        "title": "Uninstall"
       }
     ],
     "menus": {
@@ -74,17 +74,17 @@
         {
           "command": "skillbox.addSource",
           "when": "view == skillbox.sources",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
           "command": "skillbox.refreshSources",
           "when": "view == skillbox.sources",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "skillbox.openSettings",
           "when": "view == skillbox.sources",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
-import { AgentType, InstallMethod, getAgentPaths } from './types';
+import { AgentType, InstallMethod, InstallScope, getAgentPaths, Skill } from './types';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('SkillBox is now active!');
@@ -76,6 +76,110 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             });
             skillBoxProvider.refresh();
+        }),
+
+        // Install All from Source
+        vscode.commands.registerCommand('skillbox.installAllFromSource', async (node) => {
+            if (node?.source) {
+                const skills = sourceManager.getSkills(node.source.id);
+                if (skills.length === 0) {
+                    vscode.window.showWarningMessage('No resources found in this source');
+                    return;
+                }
+
+                const config = vscode.workspace.getConfiguration('skillbox');
+                const agent = config.get<AgentType>('defaultAgent', 'github-copilot');
+
+                // Choose scope
+                const projectPath = installer.getInstallPath(skills[0], agent, 'project');
+                const globalPath = installer.getInstallPath(skills[0], agent, 'global');
+                const scopeItems: vscode.QuickPickItem[] = [];
+                if (projectPath) {
+                    scopeItems.push({ label: 'Install to Project', description: getAgentPaths(agent).project });
+                }
+                if (globalPath) {
+                    scopeItems.push({ label: 'Install to Global', description: getAgentPaths(agent).global });
+                }
+                if (scopeItems.length === 0) {
+                    vscode.window.showErrorMessage('Please open a project folder first');
+                    return;
+                }
+                const scopePicked = await vscode.window.showQuickPick(scopeItems, {
+                    placeHolder: `Install all ${skills.length} resources from ${node.label}?`
+                });
+                if (!scopePicked) { return; }
+                const scope: InstallScope = scopePicked.label.includes('Project') ? 'project' : 'global';
+
+                // Choose method
+                const methodItems: vscode.QuickPickItem[] = [
+                    { label: 'Copy', description: 'Copy files to target location' },
+                    { label: 'Symlink', description: 'Create symbolic link' }
+                ];
+                const methodPicked = await vscode.window.showQuickPick(methodItems, {
+                    placeHolder: 'Installation method?'
+                });
+                if (!methodPicked) { return; }
+                const method: InstallMethod = methodPicked.label.toLowerCase() as InstallMethod;
+
+                // Check for already installed
+                const toInstall: Skill[] = [];
+                const alreadyInstalled: Skill[] = [];
+                for (const skill of skills) {
+                    const targetPath = installer.getInstallPath(skill, agent, scope);
+                    if (targetPath && installer.isInstalled(skill)) {
+                        alreadyInstalled.push(skill);
+                    } else {
+                        toInstall.push(skill);
+                    }
+                }
+
+                if (alreadyInstalled.length > 0) {
+                    const skip = await vscode.window.showWarningMessage(
+                        `${alreadyInstalled.length} resources already installed. Overwrite?`,
+                        'Overwrite All', 'Skip Existing', 'Cancel'
+                    );
+                    if (skip === 'Cancel') { return; }
+                    if (skip === 'Skip Existing') {
+                        // only install non-existing
+                    } else {
+                        // overwrite: add all
+                        toInstall.push(...alreadyInstalled);
+                    }
+                }
+
+                if (toInstall.length === 0) {
+                    vscode.window.showInformationMessage('Nothing to install');
+                    return;
+                }
+
+                const confirm = await vscode.window.showInformationMessage(
+                    `Install ${toInstall.length} resources (${method})?`,
+                    'Install', 'Cancel'
+                );
+                if (confirm !== 'Install') { return; }
+
+                await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Installing ${toInstall.length} resources...`,
+                    cancellable: false
+                }, async (progress) => {
+                    let installed = 0;
+                    for (const skill of toInstall) {
+                        progress.report({ message: `[${++installed}/${toInstall.length}] ${skill.name}` });
+                        const targetPath = installer.getInstallPath(skill, agent, scope);
+                        if (targetPath) {
+                            try {
+                                await installer.installToPath(skill, targetPath, method);
+                            } catch (e) {
+                                console.error(`Failed to install ${skill.name}:`, e);
+                            }
+                        }
+                    }
+                });
+
+                vscode.window.showInformationMessage(`Installed ${toInstall.length} resources from ${node.label}`);
+                skillBoxProvider.refresh();
+            }
         }),
 
         // Open Settings

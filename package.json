@@ -2,7 +2,7 @@
   "name": "skillbox",
   "displayName": "SkillBox",
   "description": "VSCode extension for managing Agent Skills from subscription sources",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "publisher": "leonezhu",
   "license": "MIT",
   "repository": {
@@ -57,6 +57,10 @@
         "title": "Sync This Source"
       },
       {
+        "command": "skillbox.installAllFromSource",
+        "title": "Install All Resources"
+      },
+      {
         "command": "skillbox.openSource",
         "title": "Open"
       },
@@ -109,6 +113,11 @@
           "command": "skillbox.syncSource",
           "when": "view == skillbox.sources && viewItem == source",
           "group": "1_sync"
+        },
+        {
+          "command": "skillbox.installAllFromSource",
+          "when": "view == skillbox.sources && viewItem == source",
+          "group": "1_sync@2"
         },
         {
           "command": "skillbox.openSource",

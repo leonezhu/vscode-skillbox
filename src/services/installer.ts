@@ -104,6 +104,15 @@ export class SkillInstaller {
             }
             const projectRoot = workspaceFolders[0].uri.fsPath;
             
+            // 特殊文件安装到指定位置
+            if (skill.type === 'special') {
+                if (skill.name === 'copilot-instructions.md') {
+                    return path.join(projectRoot, '.github', 'copilot-instructions.md');
+                } else if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
+                    return path.join(projectRoot, skill.name);
+                }
+            }
+            
             // instruction/agent/workflow 固定安装到 .github 目录（Copilot 专属）
             if (skill.type === 'instruction') {
                 return path.join(projectRoot, '.github', 'instructions', `${skill.name}.instructions.md`);
@@ -111,6 +120,10 @@ export class SkillInstaller {
                 return path.join(projectRoot, '.github', 'agents', `${skill.name}.agent.md`);
             } else if (skill.type === 'workflow') {
                 return path.join(projectRoot, '.github', 'prompts', 'workflows', `${skill.name}.md`);
+            } else if (skill.type === 'special') {
+                // 特殊文件安装到根目录，保持原文件名
+                const filename = path.basename(skill.path);
+                return path.join(projectRoot, filename);
             }
             
             // skills 根据 agent 类型安装到不同位置

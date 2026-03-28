@@ -184,7 +184,17 @@ export class SourceManager {
                 });
         }
 
-        // 5. 递归查找其他位置的 SKILL.md 文件
+        // 5. 扫描特殊文件（copilot-instructions.md, AGENT.md, CLAUDE.md, CLAUDE.md）
+        const specialFiles = ['copilot-instructions.md', 'AGENT.md', 'CLAUDE.md'];
+        for (const specialFile of specialFiles) {
+            const specialPath = path.join(dir, specialFile);
+            if (fs.existsSync(specialPath)) {
+                const skill = this.parseInstructionFile(specialPath, specialFile, 'special', sourceId);
+                if (skill) {skills.push(skill);}
+            }
+        }
+
+        // 6. 递归查找其他位置的 SKILL.md 文件
         this.findSkillFiles(dir, sourceId, skills);
 
         return skills;
@@ -221,6 +231,9 @@ export class SourceManager {
             name = filename.replace(/\.agent\.md$/, '');
         } else if (type === 'workflow') {
             name = filename.replace(/\.md$/, '');
+        } else if (type === 'special') {
+            // 特殊文件保留原名
+            name = filename;
         }
 
         // 尝试从内容中提取描述（第一段非标题内容）

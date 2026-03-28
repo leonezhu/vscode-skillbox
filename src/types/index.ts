@@ -2,7 +2,7 @@
 export type SourceType = 'github' | 'local';
 
 // Skill 类型
-export type SkillType = 'skill' | 'instruction' | 'agent' | 'workflow';
+export type SkillType = 'skill' | 'instruction' | 'agent' | 'workflow' | 'special';
 
 // Agent 类型
 export type AgentType = 'copilot' | 'opencode' | 'claude' | 'cursor';

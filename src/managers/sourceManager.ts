@@ -152,10 +152,12 @@ export class SourceManager {
                         }
                     } else {
                         progress.report({ message: 'Cloning repository...' });
-                        const args = ['clone'];
-                        if (source.branch) { args.push('-b', `'${source.branch}'`); }
-                        args.push(source.url, sourceDir);
-                        execSync(`git ${args.join(' ')}`, { stdio: 'pipe' });
+                        // Clone default branch first, then checkout target branch
+                        execSync(`git clone ${source.url} "${sourceDir}"`, { stdio: 'pipe' });
+                        if (source.branch) {
+                            progress.report({ message: `Switching to branch ${source.branch}...` });
+                            execSync(`git fetch origin "${source.branch}" && git checkout "${source.branch}"`, { cwd: sourceDir, stdio: 'pipe' });
+                        }
                     }
                 } else {
                     progress.report({ message: 'Reading local path...' });

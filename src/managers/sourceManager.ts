@@ -186,34 +186,43 @@ export class SourceManager {
     private scanSkills(dir: string, sourceId: string): Skill[] {
         const skills: Skill[] = [];
 
-        // 1. Scan skills/ directory (recursive)
-        const skillsDir = path.join(dir, 'skills');
-        if (fs.existsSync(skillsDir)) {
-            this.scanSkillsRecursive(skillsDir, sourceId, skills);
+        // 1. Scan common skill directories (recursive)
+        const skillDirPaths = ['skills', '.github/skills', '.agents/skills', '.claude/skills', '.cursor/skills'];
+        for (const sd of skillDirPaths) {
+            const fullDir = path.join(dir, sd);
+            if (fs.existsSync(fullDir)) {
+                this.scanSkillsRecursive(fullDir, sourceId, skills);
+            }
         }
 
-        // 2. Scan instructions/ directory
-        const instructionsDir = path.join(dir, 'instructions');
-        if (fs.existsSync(instructionsDir)) {
-            fs.readdirSync(instructionsDir)
-                .filter(f => f.endsWith('.instructions.md'))
-                .forEach(f => {
-                    const instructionPath = path.join(instructionsDir, f);
-                    const skill = this.parseInstructionFile(instructionPath, f, 'instruction', sourceId);
-                    if (skill) { skills.push(skill); }
-                });
+        // 2. Scan instruction directories
+        const instrDirPaths = ['instructions', '.github/instructions', '.agents/instructions', 'github/instructions'];
+        for (const id of instrDirPaths) {
+            const fullDir = path.join(dir, id);
+            if (fs.existsSync(fullDir)) {
+                fs.readdirSync(fullDir)
+                    .filter(f => f.endsWith('.instructions.md'))
+                    .forEach(f => {
+                        const fp = path.join(fullDir, f);
+                        const skill = this.parseInstructionFile(fp, f, 'instruction', sourceId);
+                        if (skill) { skills.push(skill); }
+                    });
+            }
         }
 
-        // 3. Scan agents/ directory
-        const agentsDir = path.join(dir, 'agents');
-        if (fs.existsSync(agentsDir)) {
-            fs.readdirSync(agentsDir)
-                .filter(f => f.endsWith('.agent.md'))
-                .forEach(f => {
-                    const agentPath = path.join(agentsDir, f);
-                    const skill = this.parseInstructionFile(agentPath, f, 'agent', sourceId);
-                    if (skill) { skills.push(skill); }
-                });
+        // 3. Scan agent directories
+        const agentDirPaths = ['agents', '.github/agents', '.agents/agents', 'github/agents'];
+        for (const ad of agentDirPaths) {
+            const fullDir = path.join(dir, ad);
+            if (fs.existsSync(fullDir)) {
+                fs.readdirSync(fullDir)
+                    .filter(f => f.endsWith('.agent.md'))
+                    .forEach(f => {
+                        const fp = path.join(fullDir, f);
+                        const skill = this.parseInstructionFile(fp, f, 'agent', sourceId);
+                        if (skill) { skills.push(skill); }
+                    });
+            }
         }
 
         // 4. Scan special files
@@ -226,7 +235,7 @@ export class SourceManager {
             }
         }
 
-        // 5. Recursively find SKILL.md files
+        // 5. Recursively find SKILL.md files anywhere else
         this.findSkillFiles(dir, sourceId, skills);
 
         return skills;
@@ -300,7 +309,7 @@ export class SourceManager {
     }
 
     private findSkillFiles(dir: string, sourceId: string, skills: Skill[]) {
-        const ignoreDirs = ['node_modules', '.git', 'out', 'dist', 'build', 'skills', 'instructions', 'agents', 'workflows', '.cache'];
+        const ignoreDirs = ['node_modules', '.git', 'out', 'dist', 'build', 'workflows', '.cache'];
 
         const scanDirectory = (currentDir: string) => {
             try {

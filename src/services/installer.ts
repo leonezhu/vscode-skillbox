@@ -73,11 +73,33 @@ export class SkillInstaller {
     }
 
     isInstalled(skill: Skill): boolean {
+        // 先检查安装记录中的实际路径
+        const record = this.installRecords.get(skill.id);
+        if (record?.targetPath && fs.existsSync(record.targetPath)) {
+            return true;
+        }
+        // 回退：检查当前 agent 的项目路径
         const projectPath = this.getProjectSkillPath(skill);
         if (projectPath && fs.existsSync(projectPath)) {
             return true;
         }
-        return this.installRecords.has(skill.id);
+        return false;
+    }
+
+    isInstalledInProject(skill: Skill): boolean {
+        const projectPath = this.getProjectSkillPath(skill);
+        if (projectPath && fs.existsSync(projectPath)) {
+            return true;
+        }
+        const record = this.installRecords.get(skill.id);
+        if (record?.targetPath) {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            const projectRoot = workspaceFolders?.[0]?.uri.fsPath;
+            if (projectRoot && record.targetPath.startsWith(projectRoot) && fs.existsSync(record.targetPath)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     hasUpdate(skill: Skill): boolean {
@@ -95,14 +117,26 @@ export class SkillInstaller {
     }
 
     async uninstall(skill: Skill): Promise<void> {
-        const projectPath = this.getProjectSkillPath(skill);
+        // 先尝试安装记录中的实际路径
+        const record = this.installRecords.get(skill.id);
+        let removePath: string | null = null;
 
-        if (!projectPath || !fs.existsSync(projectPath)) {
-            vscode.window.showWarningMessage(`${skill.name} is not installed in current project`);
+        if (record?.targetPath && fs.existsSync(record.targetPath)) {
+            removePath = record.targetPath;
+        } else {
+            // 回退：检查当前 agent 的项目路径
+            const projectPath = this.getProjectSkillPath(skill);
+            if (projectPath && fs.existsSync(projectPath)) {
+                removePath = projectPath;
+            }
+        }
+
+        if (!removePath) {
+            vscode.window.showWarningMessage(`${skill.name} is not installed`);
             return;
         }
 
-        fs.rmSync(projectPath, { recursive: true });
+        fs.rmSync(removePath, { recursive: true });
 
         this.installRecords.delete(skill.id);
         await this.saveInstallRecords();

@@ -42,6 +42,14 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             });
         }
 
+        // 先检查是否是类型分组节点
+        const skillType = (element as any).skillType;
+        if (skillType) {
+            const source = (element as any).source as Source;
+            const skills = this.sourceManager.getSkills(source.id).filter(s => s.type === skillType);
+            return skills.map(skill => this.createSkillItem(skill, source));
+        }
+
         // 获取该订阅源的 skills
         const source = (element as any).source as Source;
         if (source) {
@@ -71,14 +79,6 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             }
             
             // 单一类型，直接显示 skills
-            return skills.map(skill => this.createSkillItem(skill, source));
-        }
-
-        // 如果是类型分组节点，显示该类型的 skills
-        const skillType = (element as any).skillType;
-        if (skillType && (element as any).source) {
-            const source = (element as any).source as Source;
-            const skills = this.sourceManager.getSkills(source.id).filter(s => s.type === skillType);
             return skills.map(skill => this.createSkillItem(skill, source));
         }
 

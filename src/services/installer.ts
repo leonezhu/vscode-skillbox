@@ -6,7 +6,22 @@ import { SourceManager } from '../managers/sourceManager';
 import { Skill, AgentType, InstallScope } from '../types';
 
 export class SkillInstaller {
-    constructor(private sourceManager: SourceManager) {}
+    private installRecords: Map<string, InstallRecord> = new Map();
+
+    constructor(private sourceManager: SourceManager, private context: vscode.ExtensionContext) {
+        this.loadInstallRecords();
+    }
+
+    private loadInstallRecords() {
+        const saved = this.context.globalState.get<InstallRecord[]>('installRecords', []);
+        saved.forEach(r => {
+            this.installRecords.set(r.skillId, r);
+        });
+    }
+
+    private async saveInstallRecords() {
+        await this.context.globalState.update('installRecords', Array.from(this.installRecords.values()));
+    }
 
     async install(skill: Skill): Promise<void> {
         const config = vscode.workspace.getConfiguration('skillbox');
@@ -22,7 +37,7 @@ export class SkillInstaller {
 
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: `安装 ${skill.name}...`,
+            title: `Installing ${skill.name}...`,
             cancellable: false
         }, async () => {
             // 确保目标目录存在
@@ -38,7 +53,7 @@ export class SkillInstaller {
             await this.saveInstallRecord(skill, targetPath);
         });
 
-        vscode.window.showInformationMessage(`✅ ${skill.name} installed successfully!`);
+        vscode.window.showInformationMessage(`${skill.name} installed successfully!`);
     }
 
     async update(skill: Skill): Promise<void> {
@@ -47,8 +62,7 @@ export class SkillInstaller {
     }
 
     isInstalled(skill: Skill): boolean {
-        const records = this.getInstallRecords();
-        return records.some(r => r.skillId === skill.id);
+        return this.installRecords.has(skill.id);
     }
 
     private async getTargetPath(skill: Skill, agent: AgentType, scope: InstallScope): Promise<string | null> {
@@ -102,8 +116,6 @@ export class SkillInstaller {
     }
 
     private async saveInstallRecord(skill: Skill, targetPath: string): Promise<void> {
-        const records = this.getInstallRecords();
-        
         // 获取当前 commit hash
         let commitHash: string | undefined;
         try {
@@ -114,47 +126,16 @@ export class SkillInstaller {
             // 忽略 git 错误
         }
 
-        // 更新或添加记录
-        const existingIndex = records.findIndex(r => r.skillId === skill.id);
-        const record = {
+        // 保存记录
+        const record: InstallRecord = {
             skillId: skill.id,
             installedAt: new Date().toISOString(),
             targetPath,
             commitHash
         };
 
-        if (existingIndex >= 0) {
-            records[existingIndex] = record;
-        } else {
-            records.push(record);
-        }
-
-        // 保存到 globalState
-        await vscode.commands.executeCommand('skillbox.saveInstallRecords', records);
-    }
-
-    private getInstallRecords(): InstallRecord[] {
-        // 这里应该从 context.globalState 获取，但为了简化先用文件
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-            return [];
-        }
-
-        const recordFile = path.join(
-            workspaceFolders[0].uri.fsPath,
-            '.skillbox',
-            'install-records.json'
-        );
-
-        if (!fs.existsSync(recordFile)) {
-            return [];
-        }
-
-        try {
-            return JSON.parse(fs.readFileSync(recordFile, 'utf-8'));
-        } catch {
-            return [];
-        }
+        this.installRecords.set(skill.id, record);
+        await this.saveInstallRecords();
     }
 }
 

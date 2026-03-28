@@ -1,6 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
@@ -9,7 +7,7 @@ export function activate(context: vscode.ExtensionContext) {
     console.log('SkillBox is now active!');
 
     const sourceManager = new SourceManager(context);
-    const installer = new SkillInstaller(sourceManager);
+    const installer = new SkillInstaller(sourceManager, context);
     const skillBoxProvider = new SkillBoxProvider(sourceManager, installer);
 
     // Register Tree View
@@ -86,25 +84,6 @@ export function activate(context: vscode.ExtensionContext) {
                 await installer.update(node.skill);
                 skillBoxProvider.refresh();
             }
-        }),
-
-        // Save Install Records
-        vscode.commands.registerCommand('skillbox.saveInstallRecords', async (records: any[]) => {
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (!workspaceFolders || workspaceFolders.length === 0) {return;}
-
-            const recordFile = path.join(
-                workspaceFolders[0].uri.fsPath,
-                '.skillbox',
-                'install-records.json'
-            );
-
-            const recordDir = path.dirname(recordFile);
-            if (!fs.existsSync(recordDir)) {
-                fs.mkdirSync(recordDir, { recursive: true });
-            }
-
-            fs.writeFileSync(recordFile, JSON.stringify(records, null, 2));
         })
     );
 }

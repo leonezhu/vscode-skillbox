@@ -290,10 +290,17 @@ export class SourceManager {
             } else {
                 centralRepo = path.join(this.context.globalStorageUri.fsPath, 'skills');
             }
-            
-            if (!fs.existsSync(centralRepo)) {
-                fs.mkdirSync(centralRepo, { recursive: true });
+        } else if (centralRepo.startsWith('~')) {
+            // 展开 ~ 为 home 目录
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (homeDir) {
+                centralRepo = path.join(homeDir, centralRepo.substring(1));
             }
+        }
+        
+        // 确保目录存在
+        if (!fs.existsSync(centralRepo)) {
+            fs.mkdirSync(centralRepo, { recursive: true });
         }
         
         return centralRepo;

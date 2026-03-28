@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import simpleGit from 'simple-git';
 import { SourceManager } from '../managers/sourceManager';
-import { Skill, AgentType, InstallScope, InstallMethod } from '../types';
+import { Skill, AgentType, InstallScope, InstallMethod, getAgentPaths } from '../types';
 
 export class SkillInstaller {
     private installRecords: Map<string, InstallRecord> = new Map();
@@ -212,38 +212,21 @@ export class SkillInstaller {
             return path.join(basePath, '.github', 'agents', `${skill.name}.agent.md`);
         }
 
-        if (agent === 'copilot') {
-            return path.join(basePath, '.github', 'skills', skill.name);
-        } else if (agent === 'opencode') {
-            return path.join(basePath, '.agents', 'skills', skill.name);
-        } else if (agent === 'claude') {
-            return path.join(basePath, '.claude', 'skills', skill.name);
-        } else if (agent === 'cursor') {
-            return path.join(basePath, '.cursor', 'skills', skill.name);
-        }
-        return path.join(basePath, '.skills', skill.name);
+        const agentPaths = getAgentPaths(agent);
+        return path.join(basePath, agentPaths.project, skill.name);
     }
 
-    // Global scope: all go to ~/.skillbox/ (the central hub)
     private resolveGlobalPath(skill: Skill, agent: AgentType, centralRepo: string): string {
         if (skill.type === 'special') {
-            // Special files get {source-prefix} to avoid collisions
             const sourceName = this.sourceManager.getSourceName(skill.sourceId);
-            const prefix = sourceName.replace(/[\/\\]/g, '-');
-            if (skill.name === 'copilot-instructions.md') {
-                return path.join(centralRepo, 'special', `${prefix}-copilot-instructions.md`);
-            } else if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
-                return path.join(centralRepo, 'special', `${prefix}-${skill.name.toLowerCase()}`);
-            }
+            const sourceDir = sourceName.replace(/[\/\\]/g, '-');
+            return path.join(centralRepo, 'special', sourceDir, skill.name.toLowerCase());
         }
-
         if (skill.type === 'instruction') {
             return path.join(centralRepo, 'instructions', `${skill.name}.instructions.md`);
         } else if (skill.type === 'agent') {
             return path.join(centralRepo, 'agents', `${skill.name}.agent.md`);
         }
-
-        // Skills
         return path.join(centralRepo, 'skills', skill.name);
     }
 

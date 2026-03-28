@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
-import { AgentType, InstallMethod } from './types';
+import { AgentType, InstallMethod, getAgentPaths } from './types';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('SkillBox is now active!');
@@ -23,7 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
     const updateTitle = () => {
         const config = vscode.workspace.getConfiguration('skillbox');
         const agent = config.get<AgentType>('defaultAgent', 'copilot');
-        treeView.title = agent.charAt(0).toUpperCase() + agent.slice(1);
+        treeView.title = getAgentPaths(agent).label;
     };
     updateTitle();
 

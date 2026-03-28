@@ -113,13 +113,11 @@ export class SkillInstaller {
                 }
             }
             
-            // instruction/agent/workflow 固定安装到 .github 目录（Copilot 专属）
+            // instruction/agent 固定安装到 .github 目录（Copilot 专属）
             if (skill.type === 'instruction') {
                 return path.join(projectRoot, '.github', 'instructions', `${skill.name}.instructions.md`);
             } else if (skill.type === 'agent') {
                 return path.join(projectRoot, '.github', 'agents', `${skill.name}.agent.md`);
-            } else if (skill.type === 'workflow') {
-                return path.join(projectRoot, '.github', 'prompts', 'workflows', `${skill.name}.md`);
             } else if (skill.type === 'special') {
                 // 特殊文件安装到根目录，保持原文件名
                 const filename = path.basename(skill.path);

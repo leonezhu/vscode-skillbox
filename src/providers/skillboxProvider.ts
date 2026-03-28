@@ -101,7 +101,6 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             'skill': 'Skills',
             'instruction': 'Instructions',
             'agent': 'Agents',
-            'workflow': 'Workflows',
             'special': 'Special Files'
         };
         return labels[type] || type;
@@ -112,7 +111,6 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             'skill': 'package',
             'instruction': 'book',
             'agent': 'hubot',
-            'workflow': 'combine',
             'special': 'star'
         };
         return icons[type] || 'file';

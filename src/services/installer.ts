@@ -43,27 +43,37 @@ export class SkillInstaller {
             title: `Installing ${skill.name}...`,
             cancellable: false
         }, async () => {
+            const centralRepo = this.sourceManager.getCentralRepo();
+            const hubPath = this.getHubPath(skill, centralRepo);
+            const hubDir = path.dirname(hubPath);
+            if (!fs.existsSync(hubDir)) {
+                fs.mkdirSync(hubDir, { recursive: true });
+            }
+
             const targetDir = path.dirname(targetPath);
             if (!fs.existsSync(targetDir)) {
                 fs.mkdirSync(targetDir, { recursive: true });
             }
 
-            if (skill.type === 'skill') {
-                if (method === 'symlink') {
-                    await this.linkDirectory(skill.path, targetPath);
-                } else {
+            if (method === 'copy') {
+                // Copy: hub gets a copy, project gets a copy
+                if (skill.type === 'skill') {
+                    await this.copyDirectory(skill.path, hubPath);
                     await this.copyDirectory(skill.path, targetPath);
-                }
-            } else {
-                if (method === 'symlink') {
-                    await this.linkFile(skill.path, targetPath);
                 } else {
+                    fs.copyFileSync(skill.path, hubPath);
                     fs.copyFileSync(skill.path, targetPath);
                 }
+            } else {
+                // Symlink: hub gets the actual copy, project symlinks to hub
+                if (skill.type === 'skill') {
+                    await this.copyDirectory(skill.path, hubPath);
+                    await this.linkDirectory(hubPath, targetPath);
+                } else {
+                    fs.copyFileSync(skill.path, hubPath);
+                    await this.linkFile(hubPath, targetPath);
+                }
             }
-
-            // Mirror to ~/.skillbox/ hub (symlink to actual location)
-            await this.mirrorToHub(skill, targetPath);
 
             await this.saveInstallRecord(skill, targetPath);
         });
@@ -146,42 +156,11 @@ export class SkillInstaller {
         vscode.window.showInformationMessage(`${skill.name} uninstalled successfully!`);
     }
 
-    // Create symlink in ~/.skillbox/ pointing to actual install location
-    private async mirrorToHub(skill: Skill, targetPath: string): Promise<void> {
-        const centralRepo = this.sourceManager.getCentralRepo();
-        const hubPath = this.getHubPath(skill, centralRepo);
-
-        // Ensure parent dir exists
-        const hubDir = path.dirname(hubPath);
-        if (!fs.existsSync(hubDir)) {
-            fs.mkdirSync(hubDir, { recursive: true });
-        }
-
-        // Remove existing
-        if (fs.existsSync(hubPath)) {
-            fs.unlinkSync(hubPath);
-        }
-
-        try {
-            if (fs.lstatSync(targetPath).isDirectory()) {
-                fs.symlinkSync(targetPath, hubPath, 'junction');
-            } else {
-                fs.symlinkSync(targetPath, hubPath, 'file');
-            }
-        } catch {
-            // Silently fail if symlink creation fails (e.g. permissions)
-        }
-    }
-
     private async removeFromHub(skill: Skill): Promise<void> {
         const centralRepo = this.sourceManager.getCentralRepo();
         const hubPath = this.getHubPath(skill, centralRepo);
         if (fs.existsSync(hubPath)) {
-            try {
-                fs.unlinkSync(hubPath);
-            } catch {
-                fs.rmSync(hubPath, { recursive: true });
-            }
+            fs.rmSync(hubPath, { recursive: true });
         }
     }
 

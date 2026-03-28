@@ -146,37 +146,28 @@ export class SkillInstaller {
         }
 
         fs.rmSync(removePath, { recursive: true });
-
-        // Remove hub symlink
-        await this.removeFromHub(skill);
+        // Don't touch hub - it's a permanent pool
 
         this.installRecords.delete(skill.id);
         await this.saveInstallRecords();
 
-        vscode.window.showInformationMessage(`${skill.name} uninstalled successfully!`);
-    }
-
-    private async removeFromHub(skill: Skill): Promise<void> {
-        const centralRepo = this.sourceManager.getCentralRepo();
-        const hubPath = this.getHubPath(skill, centralRepo);
-        if (fs.existsSync(hubPath)) {
-            fs.rmSync(hubPath, { recursive: true });
-        }
+        vscode.window.showInformationMessage(`${skill.name} uninstalled from project`);
     }
 
     private getHubPath(skill: Skill, centralRepo: string): string {
+        const sourceName = this.sourceManager.getSourceName(skill.sourceId);
+        const prefix = sourceName.replace(/[\/\\]/g, '-');
+
         if (skill.type === 'special') {
-            const sourceName = this.sourceManager.getSourceName(skill.sourceId);
-            const prefix = sourceName.replace(/[\/\\]/g, '-');
             return path.join(centralRepo, 'special', `${prefix}-${skill.name.toLowerCase()}`);
         }
         if (skill.type === 'instruction') {
-            return path.join(centralRepo, 'instructions', `${skill.name}.instructions.md`);
+            return path.join(centralRepo, 'instructions', `${prefix}-${skill.name}.instructions.md`);
         }
         if (skill.type === 'agent') {
-            return path.join(centralRepo, 'agents', `${skill.name}.agent.md`);
+            return path.join(centralRepo, 'agents', `${prefix}-${skill.name}.agent.md`);
         }
-        return path.join(centralRepo, 'skills', skill.name);
+        return path.join(centralRepo, 'skills', `${prefix}-${skill.name}`);
     }
 
     // Project scope paths

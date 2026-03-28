@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
+import { AgentType } from './types';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('SkillBox is now active!');
@@ -117,7 +118,63 @@ export function activate(context: vscode.ExtensionContext) {
         // Install Skill
         vscode.commands.registerCommand('skillbox.installSkill', async (node) => {
             if (node?.skill) {
-                await installer.install(node.skill);
+                const skill = node.skill;
+                const config = vscode.workspace.getConfiguration('skillbox');
+                const agent = config.get<AgentType>('defaultAgent', 'copilot');
+                
+                // 计算项目路径和全局路径
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                const projectRoot = workspaceFolders?.[0]?.uri.fsPath;
+                
+                let projectPath: string | null = null;
+                let globalPath: string | null = null;
+                
+                if (projectRoot) {
+                    projectPath = installer.getInstallPath(skill, agent, 'project');
+                }
+                globalPath = installer.getInstallPath(skill, agent, 'global');
+                
+                // 构建选项列表
+                const items: vscode.QuickPickItem[] = [];
+                
+                if (projectPath) {
+                    const shortPath = projectRoot ? projectPath.replace(projectRoot, '.') : projectPath;
+                    items.push({
+                        label: 'Install to Project',
+                        description: shortPath,
+                        detail: projectPath
+                    });
+                }
+                
+                if (globalPath) {
+                    const homeDir = process.env.HOME || '';
+                    items.push({
+                        label: 'Install to Global',
+                        description: globalPath.startsWith(homeDir) ? globalPath.replace(homeDir, '~') : globalPath,
+                        detail: globalPath
+                    });
+                }
+                
+                if (items.length === 0) {
+                    vscode.window.showErrorMessage('Please open a project folder first');
+                    return;
+                }
+                
+                // 如果只有一个选项且默认是 project，直接安装
+                if (items.length === 1 && projectPath) {
+                    await installer.installToPath(skill, projectPath);
+                    skillBoxProvider.refresh();
+                    return;
+                }
+                
+                const picked = await vscode.window.showQuickPick(items, {
+                    placeHolder: `Where to install "${skill.name}"?`
+                });
+                
+                if (!picked) {return;}
+                
+                const targetPath = picked.detail!;
+                await installer.installToPath(skill, targetPath);
                 skillBoxProvider.refresh();
             }
         }),

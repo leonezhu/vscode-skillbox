@@ -23,40 +23,41 @@ export class SkillInstaller {
         await this.context.globalState.update('installRecords', Array.from(this.installRecords.values()));
     }
 
-    async install(skill: Skill): Promise<void> {
-        const config = vscode.workspace.getConfiguration('skillbox');
-        const agent = config.get<AgentType>('defaultAgent', 'copilot');
-        const scope = config.get<InstallScope>('defaultScope', 'project');
-        const method = config.get<InstallMethod>('installMethod', 'copy');
+    getInstallPath(skill: Skill, agent: AgentType, scope: InstallScope): string | null {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
 
-        const targetPath = await this.getTargetPath(skill, agent, scope);
-        
-        if (!targetPath) {
-            vscode.window.showErrorMessage('Please open a project folder first');
-            return;
+        if (scope === 'project') {
+            if (!workspaceFolders || workspaceFolders.length === 0) { return null; }
+            const projectRoot = workspaceFolders[0].uri.fsPath;
+            return this.resolvePath(skill, agent, projectRoot);
+        } else {
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (!homeDir) { return null; }
+            return this.resolvePath(skill, agent, homeDir);
         }
+    }
+
+    async installToPath(skill: Skill, targetPath: string): Promise<void> {
+        const config = vscode.workspace.getConfiguration('skillbox');
+        const method = config.get<InstallMethod>('installMethod', 'copy');
 
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: `Installing ${skill.name}...`,
             cancellable: false
         }, async () => {
-            // 确保目标目录存在
             const targetDir = path.dirname(targetPath);
             if (!fs.existsSync(targetDir)) {
                 fs.mkdirSync(targetDir, { recursive: true });
             }
 
-            // 根据资源类型安装
             if (skill.type === 'skill') {
-                // skill 是目录，复制或链接整个目录
                 if (method === 'symlink') {
                     await this.linkDirectory(skill.path, targetPath);
                 } else {
                     await this.copyDirectory(skill.path, targetPath);
                 }
             } else {
-                // instruction/agent/workflow 是单个文件
                 if (method === 'symlink') {
                     await this.linkFile(skill.path, targetPath);
                 } else {
@@ -64,7 +65,6 @@ export class SkillInstaller {
                 }
             }
 
-            // 保存安装记录
             await this.saveInstallRecord(skill, targetPath);
         });
 
@@ -72,12 +72,10 @@ export class SkillInstaller {
     }
 
     async update(skill: Skill): Promise<void> {
-        // 更新就是重新安装
-        await this.install(skill);
+        await this.installToPath(skill, this.getProjectSkillPath(skill) || '');
     }
 
     isInstalled(skill: Skill): boolean {
-        // 检查项目目录中是否存在
         const projectPath = this.getProjectSkillPath(skill);
         if (projectPath && fs.existsSync(projectPath)) {
             return true;
@@ -86,133 +84,73 @@ export class SkillInstaller {
     }
 
     hasUpdate(skill: Skill): boolean {
-        // 暂时返回 false，更新检查需要异步实现
-        // 可以在后续版本中添加
         return false;
     }
 
     getProjectSkillPath(skill: Skill): string | null {
         const config = vscode.workspace.getConfiguration('skillbox');
         const agent = config.get<AgentType>('defaultAgent', 'copilot');
-        const scope = config.get<InstallScope>('defaultScope', 'project');
-
         const workspaceFolders = vscode.workspace.workspaceFolders;
-        
-        if (scope === 'project') {
-            if (!workspaceFolders || workspaceFolders.length === 0) {
-                return null;
-            }
-            const projectRoot = workspaceFolders[0].uri.fsPath;
-            
-            // 特殊文件安装到指定位置
-            if (skill.type === 'special') {
-                if (skill.name === 'copilot-instructions.md') {
-                    return path.join(projectRoot, '.github', 'copilot-instructions.md');
-                } else if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
-                    return path.join(projectRoot, skill.name);
-                }
-            }
-            
-            // instruction/agent 固定安装到 .github 目录（Copilot 专属）
-            if (skill.type === 'instruction') {
-                return path.join(projectRoot, '.github', 'instructions', `${skill.name}.instructions.md`);
-            } else if (skill.type === 'agent') {
-                return path.join(projectRoot, '.github', 'agents', `${skill.name}.agent.md`);
-            } else if (skill.type === 'special') {
-                // 特殊文件安装到根目录，保持原文件名
-                const filename = path.basename(skill.path);
-                return path.join(projectRoot, filename);
-            }
-            
-            // skills 根据 agent 类型安装到不同位置
-            if (agent === 'copilot') {
-                return path.join(projectRoot, '.github', 'skills', skill.name);
-            } else if (agent === 'opencode') {
-                return path.join(projectRoot, '.agents', 'skills', skill.name);
-            } else if (agent === 'claude') {
-                return path.join(projectRoot, '.claude', 'skills', skill.name);
-            } else if (agent === 'cursor') {
-                return path.join(projectRoot, '.cursor', 'skills', skill.name);
-            }
-            return path.join(projectRoot, '.skills', skill.name);
-        }
-        return null;
+
+        if (!workspaceFolders || workspaceFolders.length === 0) { return null; }
+        const projectRoot = workspaceFolders[0].uri.fsPath;
+        return this.resolvePath(skill, agent, projectRoot);
     }
 
     async uninstall(skill: Skill): Promise<void> {
         const projectPath = this.getProjectSkillPath(skill);
-        
+
         if (!projectPath || !fs.existsSync(projectPath)) {
             vscode.window.showWarningMessage(`${skill.name} is not installed in current project`);
             return;
         }
 
-        // 删除目录
         fs.rmSync(projectPath, { recursive: true });
-        
-        // 删除记录
+
         this.installRecords.delete(skill.id);
         await this.saveInstallRecords();
 
         vscode.window.showInformationMessage(`${skill.name} uninstalled successfully!`);
     }
 
-    private async getTargetPath(skill: Skill, agent: AgentType, scope: InstallScope): Promise<string | null> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        
-        if (scope === 'project') {
-            if (!workspaceFolders || workspaceFolders.length === 0) {
-                return null;
-            }
-            const projectRoot = workspaceFolders[0].uri.fsPath;
-            
-            switch (agent) {
-                case 'copilot':
-                    if (skill.type === 'instruction') {
-                        return path.join(projectRoot, '.github', 'instructions', skill.name);
-                    }
-                    return path.join(projectRoot, '.github', 'skills', skill.name);
-                case 'opencode':
-                    return path.join(projectRoot, '.agents', 'skills', skill.name);
-                case 'claude':
-                    return path.join(projectRoot, '.claude', 'skills', skill.name);
-                case 'cursor':
-                    return path.join(projectRoot, '.cursor', 'skills', skill.name);
-                default:
-                    return path.join(projectRoot, '.skills', skill.name);
-            }
-        } else {
-            // Global scope
-            const homeDir = process.env.HOME || process.env.USERPROFILE;
-            if (!homeDir) {return null;}
-            
-            switch (agent) {
-                case 'copilot':
-                    return path.join(homeDir, '.github', 'copilot', 'skills', skill.name);
-                case 'opencode':
-                    return path.join(homeDir, '.agents', 'skills', skill.name);
-                case 'claude':
-                    return path.join(homeDir, '.claude', 'skills', skill.name);
-                case 'cursor':
-                    return path.join(homeDir, '.cursor', 'skills', skill.name);
-                default:
-                    return path.join(homeDir, '.skills', skill.name);
+    private resolvePath(skill: Skill, agent: AgentType, basePath: string): string {
+        // Special files
+        if (skill.type === 'special') {
+            if (skill.name === 'copilot-instructions.md') {
+                return path.join(basePath, '.github', 'copilot-instructions.md');
+            } else if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
+                return path.join(basePath, skill.name);
             }
         }
+
+        // instruction/agent always go to .github
+        if (skill.type === 'instruction') {
+            return path.join(basePath, '.github', 'instructions', `${skill.name}.instructions.md`);
+        } else if (skill.type === 'agent') {
+            return path.join(basePath, '.github', 'agents', `${skill.name}.agent.md`);
+        }
+
+        // skills depend on agent type
+        if (agent === 'copilot') {
+            return path.join(basePath, '.github', 'skills', skill.name);
+        } else if (agent === 'opencode') {
+            return path.join(basePath, '.agents', 'skills', skill.name);
+        } else if (agent === 'claude') {
+            return path.join(basePath, '.claude', 'skills', skill.name);
+        } else if (agent === 'cursor') {
+            return path.join(basePath, '.cursor', 'skills', skill.name);
+        }
+        return path.join(basePath, '.skills', skill.name);
     }
 
     private async copyDirectory(src: string, dest: string): Promise<void> {
-        // 如果目标已存在，先删除
         if (fs.existsSync(dest)) {
             fs.rmSync(dest, { recursive: true });
         }
-
-        // 复制目录
         fs.cpSync(src, dest, { recursive: true });
     }
 
     private async linkDirectory(src: string, dest: string): Promise<void> {
-        // 如果目标已存在，先删除
         if (fs.existsSync(dest)) {
             const stat = fs.lstatSync(dest);
             if (stat.isSymbolicLink()) {
@@ -221,33 +159,26 @@ export class SkillInstaller {
                 fs.rmSync(dest, { recursive: true });
             }
         }
-
-        // 创建符号链接
         fs.symlinkSync(src, dest, 'junction');
     }
 
     private async linkFile(src: string, dest: string): Promise<void> {
-        // 如果目标已存在，先删除
         if (fs.existsSync(dest)) {
             fs.unlinkSync(dest);
         }
-
-        // 创建符号链接
         fs.symlinkSync(src, dest, 'file');
     }
 
     private async saveInstallRecord(skill: Skill, targetPath: string): Promise<void> {
-        // 获取当前 commit hash
         let commitHash: string | undefined;
         try {
             const sourcePath = this.sourceManager.getSourcePath(skill.sourceId);
             const git = simpleGit(sourcePath);
             commitHash = (await git.revparse(['HEAD'])).trim();
         } catch {
-            // 忽略 git 错误
+            // ignore
         }
 
-        // 保存记录
         const record: InstallRecord = {
             skillId: skill.id,
             installedAt: new Date().toISOString(),

@@ -153,8 +153,10 @@ export class SourceManager {
                         progress.report({ message: 'Cloning repository...' });
                         // Use git raw command for PAT URLs (simple-git may mangle them)
                         if (source.url.includes('@github.com') && source.url.includes('://')) {
-                            const branchArg = source.branch ? `-b ${source.branch}` : '';
-                            await simpleGit().raw(['clone', branchArg, source.url, sourceDir]);
+                            const args = ['clone'];
+                            if (source.branch) { args.push('-b', source.branch); }
+                            args.push(source.url, sourceDir);
+                            await simpleGit().raw(args);
                         } else {
                             const cloneOptions = source.branch ? ['--branch', source.branch] : [];
                             await simpleGit().clone(source.url, sourceDir, cloneOptions);

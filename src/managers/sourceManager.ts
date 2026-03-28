@@ -89,7 +89,8 @@ export class SourceManager {
 
         let name: string;
         if (type === 'github') {
-            const match = url.match(/github\.com[/:]([^/]+\/[^/]+)/);
+            // Support: https://github.com/owner/repo, git@github.com:owner/repo, https://PAT@github.com/owner/repo
+            const match = url.match(/github\.com[/:]([^/@]+\/[^/]+)/);
             name = match ? match[1].replace(/\.git$/, '') : path.basename(url.replace(/\.git$/, ''));
         } else {
             name = `local/${path.basename(url)}`;

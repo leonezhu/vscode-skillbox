@@ -179,16 +179,10 @@ export class SourceManager {
     private scanSkills(dir: string, sourceId: string): Skill[] {
         const skills: Skill[] = [];
 
-        // 1. Scan skills/ directory
+        // 1. Scan skills/ directory (recursive)
         const skillsDir = path.join(dir, 'skills');
         if (fs.existsSync(skillsDir)) {
-            fs.readdirSync(skillsDir, { withFileTypes: true })
-                .filter(d => d.isDirectory())
-                .forEach(d => {
-                    const skillPath = path.join(skillsDir, d.name);
-                    const skill = this.parseSkillDir(skillPath, d.name, 'skill', sourceId);
-                    if (skill) { skills.push(skill); }
-                });
+            this.scanSkillsRecursive(skillsDir, sourceId, skills);
         }
 
         // 2. Scan instructions/ directory
@@ -229,6 +223,21 @@ export class SourceManager {
         this.findSkillFiles(dir, sourceId, skills);
 
         return skills;
+    }
+
+    private scanSkillsRecursive(skillsDir: string, sourceId: string, skills: Skill[]) {
+        fs.readdirSync(skillsDir, { withFileTypes: true })
+            .filter(d => d.isDirectory())
+            .forEach(d => {
+                const skillPath = path.join(skillsDir, d.name);
+                if (fs.existsSync(path.join(skillPath, 'SKILL.md'))) {
+                    const skill = this.parseSkillDir(skillPath, d.name, 'skill', sourceId);
+                    if (skill) { skills.push(skill); }
+                } else {
+                    // No SKILL.md here, go deeper
+                    this.scanSkillsRecursive(skillPath, sourceId, skills);
+                }
+            });
     }
 
     private parseSkillDir(dir: string, name: string, type: SkillType, sourceId: string): Skill | null {

@@ -127,42 +127,50 @@ export class SourceManager {
         try {
             let sourceDir: string;
 
-            if (source.type === 'github') {
-                // 远程源：clone/pull 到 .cache/
-                const cacheDir = this.getCacheDir();
-                sourceDir = path.join(cacheDir, id);
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Syncing ${source.name}...`,
+                cancellable: false
+            }, async (progress) => {
+                if (source.type === 'github') {
+                    progress.report({ message: 'Cloning repository...' });
+                    const cacheDir = this.getCacheDir();
+                    sourceDir = path.join(cacheDir, id);
 
-                if (fs.existsSync(sourceDir)) {
-                    const git = simpleGit(sourceDir);
-                    const branch = source.branch || (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
-                    await git.checkout(branch);
-                    try {
-                        await git.pull('origin', branch);
-                    } catch {
-                        await git.fetch('origin');
-                        await git.reset(['--hard', `origin/${branch}`]);
+                    if (fs.existsSync(sourceDir)) {
+                        progress.report({ message: 'Updating repository...' });
+                        const git = simpleGit(sourceDir);
+                        const branch = source.branch || (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+                        await git.checkout(branch);
+                        try {
+                            await git.pull('origin', branch);
+                        } catch {
+                            await git.fetch('origin');
+                            await git.reset(['--hard', `origin/${branch}`]);
+                        }
+                    } else {
+                        const cloneOptions = source.branch ? ['--branch', source.branch] : [];
+                        await simpleGit().clone(source.url, sourceDir, cloneOptions);
                     }
                 } else {
-                    const cloneOptions = source.branch ? ['--branch', source.branch] : [];
-                    await simpleGit().clone(source.url, sourceDir, cloneOptions);
+                    progress.report({ message: 'Reading local path...' });
+                    sourceDir = source.url;
+                    if (!fs.existsSync(sourceDir)) {
+                        vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
+                        return;
+                    }
                 }
-            } else {
-                // 本地源：直接读取，不缓存
-                sourceDir = source.url;
-                if (!fs.existsSync(sourceDir)) {
-                    vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
-                    return;
-                }
-            }
 
-            const skills = this.scanSkills(sourceDir, id);
-            this.skills.set(id, skills);
-            await this.saveSkills();
+                progress.report({ message: 'Scanning resources...' });
+                const skills = this.scanSkills(sourceDir, id);
+                this.skills.set(id, skills);
+                await this.saveSkills();
 
-            source.lastSync = new Date().toISOString();
-            await this.saveSources();
+                source.lastSync = new Date().toISOString();
+                await this.saveSources();
+            });
 
-            vscode.window.showInformationMessage(`Synced ${source.name}: ${skills.length} resources found`);
+            vscode.window.showInformationMessage(`Synced ${source.name}: ${this.skills.get(id)?.length || 0} resources found`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to sync ${source.name}: ${error}`);
         }

@@ -238,7 +238,13 @@ export class SourceManager {
         // 5. Recursively find SKILL.md files anywhere else
         this.findSkillFiles(dir, sourceId, skills);
 
-        return skills;
+        // Deduplicate by path
+        const seen = new Set<string>();
+        return skills.filter(s => {
+            if (seen.has(s.path)) { return false; }
+            seen.add(s.path);
+            return true;
+        });
     }
 
     private scanSkillsRecursive(skillsDir: string, sourceId: string, skills: Skill[]) {

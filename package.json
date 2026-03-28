@@ -28,36 +28,36 @@
       "skillbox": [
         {
           "id": "skillbox.sources",
-          "name": "订阅源"
+          "name": "Sources"
         }
       ]
     },
     "commands": [
       {
         "command": "skillbox.addSource",
-        "title": "添加订阅源",
+        "title": "Add Source",
         "icon": "$(add)"
       },
       {
         "command": "skillbox.refreshSources",
-        "title": "刷新订阅源",
+        "title": "Refresh Sources",
         "icon": "$(refresh)"
       },
       {
         "command": "skillbox.syncSource",
-        "title": "同步此订阅源"
+        "title": "Sync This Source"
       },
       {
         "command": "skillbox.removeSource",
-        "title": "移除此订阅源"
+        "title": "Remove This Source"
       },
       {
         "command": "skillbox.installSkill",
-        "title": "安装 Skill"
+        "title": "Install Skill"
       },
       {
         "command": "skillbox.updateSkill",
-        "title": "更新 Skill"
+        "title": "Update Skill"
       }
     ],
     "menus": {
@@ -102,19 +102,19 @@
         "skillbox.centralRepo": {
           "type": "string",
           "default": "",
-          "description": "集中安装目录路径"
+          "description": "Central repository path for storing synced skills"
         },
         "skillbox.defaultAgent": {
           "type": "string",
           "enum": ["copilot", "openclaw", "claude"],
           "default": "copilot",
-          "description": "默认 Agent 类型"
+          "description": "Default agent type"
         },
         "skillbox.defaultScope": {
           "type": "string",
           "enum": ["project", "global"],
           "default": "project",
-          "description": "默认安装范围"
+          "description": "Default installation scope"
         }
       }
     }

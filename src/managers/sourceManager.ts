@@ -26,12 +26,20 @@ export class SourceManager {
         await this.context.globalState.update('sources', Array.from(this.sources.values()));
     }
 
-    async addSource(url: string): Promise<Source> {
+    async addSource(url: string, branch?: string): Promise<Source> {
         const id = crypto.randomUUID();
         const type: SourceType = url.startsWith('http') ? 'github' : 'local';
-        const name = path.basename(url.replace(/\.git$/, ''));
+        
+        // 解析仓库名称 (owner/repo 格式)
+        let name: string;
+        if (type === 'github') {
+            const match = url.match(/github\.com[/:]([^/]+\/[^/]+)/);
+            name = match ? match[1].replace(/\.git$/, '') : path.basename(url.replace(/\.git$/, ''));
+        } else {
+            name = path.basename(url);
+        }
 
-        const source: Source = { id, url, type, name };
+        const source: Source = { id, url, type, name, branch };
         this.sources.set(id, source);
         await this.saveSources();
 
@@ -57,9 +65,14 @@ export class SourceManager {
         if (source.type === 'github') {
             // Clone 或 pull
             if (fs.existsSync(sourceDir)) {
-                await simpleGit(sourceDir).pull();
+                const git = simpleGit(sourceDir);
+                if (source.branch) {
+                    await git.checkout(source.branch);
+                }
+                await git.pull();
             } else {
-                await simpleGit().clone(source.url, sourceDir);
+                const cloneOptions = source.branch ? ['--branch', source.branch] : [];
+                await simpleGit().clone(source.url, sourceDir, cloneOptions);
             }
         } else {
             // 本地源 - 创建符号链接或复制

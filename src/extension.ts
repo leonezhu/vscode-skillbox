@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
@@ -23,13 +25,18 @@ export function activate(context: vscode.ExtensionContext) {
         // Add Source
         vscode.commands.registerCommand('skillbox.addSource', async () => {
             const url = await vscode.window.showInputBox({
-                prompt: '输入订阅源地址 (GitHub URL 或本地路径)',
-                placeHolder: 'https://github.com/user/skills-repo'
+                prompt: 'Enter subscription source URL (GitHub or local path)',
+                placeHolder: 'https://github.com/owner/skills-repo'
             });
-            if (url) {
-                await sourceManager.addSource(url);
-                skillBoxProvider.refresh();
-            }
+            if (!url) {return;}
+
+            const branch = await vscode.window.showInputBox({
+                prompt: 'Branch name (leave empty for default branch)',
+                placeHolder: 'main'
+            });
+
+            await sourceManager.addSource(url, branch || undefined);
+            skillBoxProvider.refresh();
         }),
 
         // Refresh Sources
@@ -42,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (node?.source) {
                 await vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,
-                    title: `同步 ${node.label}...`,
+                    title: `Syncing ${node.label}...`,
                     cancellable: false
                 }, async () => {
                     await sourceManager.syncSource(node.source.id);
@@ -55,10 +62,10 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('skillbox.removeSource', async (node) => {
             if (node?.source) {
                 const confirm = await vscode.window.showWarningMessage(
-                    `确定移除订阅源 "${node.label}"?`,
-                    '确定', '取消'
+                    `Remove source "${node.label}"?`,
+                    'Yes', 'No'
                 );
-                if (confirm === '确定') {
+                if (confirm === 'Yes') {
                     await sourceManager.removeSource(node.source.id);
                     skillBoxProvider.refresh();
                 }
@@ -79,6 +86,25 @@ export function activate(context: vscode.ExtensionContext) {
                 await installer.update(node.skill);
                 skillBoxProvider.refresh();
             }
+        }),
+
+        // Save Install Records
+        vscode.commands.registerCommand('skillbox.saveInstallRecords', async (records: any[]) => {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {return;}
+
+            const recordFile = path.join(
+                workspaceFolders[0].uri.fsPath,
+                '.skillbox',
+                'install-records.json'
+            );
+
+            const recordDir = path.dirname(recordFile);
+            if (!fs.existsSync(recordDir)) {
+                fs.mkdirSync(recordDir, { recursive: true });
+            }
+
+            fs.writeFileSync(recordFile, JSON.stringify(records, null, 2));
         })
     );
 }

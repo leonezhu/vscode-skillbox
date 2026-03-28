@@ -15,7 +15,8 @@ export interface Source {
     id: string;
     url: string;
     type: SourceType;
-    name: string;
+    name: string;           // 仓库名: owner/repo 格式
+    branch?: string;        // 分支名，不填则使用默认分支
     lastSync?: string;
 }
 
@@ -50,7 +51,6 @@ export interface SkillTreeNode {
     tooltip?: string;
     description?: string;
     contextValue?: string;
-    collapsibleState?: vscode.TreeItemCollapsibleState;
     source?: Source;
     skill?: Skill;
     children?: SkillTreeNode[];

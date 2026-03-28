@@ -16,7 +16,7 @@ export class SkillInstaller {
         const targetPath = await this.getTargetPath(skill, agent, scope);
         
         if (!targetPath) {
-            vscode.window.showErrorMessage('请先打开一个项目文件夹');
+            vscode.window.showErrorMessage('Please open a project folder first');
             return;
         }
 
@@ -38,7 +38,7 @@ export class SkillInstaller {
             await this.saveInstallRecord(skill, targetPath);
         });
 
-        vscode.window.showInformationMessage(`✅ ${skill.name} 安装成功!`);
+        vscode.window.showInformationMessage(`✅ ${skill.name} installed successfully!`);
     }
 
     async update(skill: Skill): Promise<void> {

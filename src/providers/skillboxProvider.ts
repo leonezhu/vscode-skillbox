@@ -47,7 +47,14 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
         if (skillType) {
             const source = (element as any).source as Source;
             const skills = this.sourceManager.getSkills(source.id).filter(s => s.type === skillType);
-            return skills.map(skill => this.createSkillItem(skill, source));
+            return skills
+                .sort((a, b) => {
+                    const aInstalled = this.installer.isInstalled(a) ? 0 : 1;
+                    const bInstalled = this.installer.isInstalled(b) ? 0 : 1;
+                    if (aInstalled !== bInstalled) {return aInstalled - bInstalled;}
+                    return a.name.localeCompare(b.name);
+                })
+                .map(skill => this.createSkillItem(skill, source));
         }
 
         // 获取该订阅源的 skills
@@ -78,8 +85,15 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
                 return items;
             }
             
-            // 单一类型，直接显示 skills
-            return skills.map(skill => this.createSkillItem(skill, source));
+            // 按类型分组，已安装的排在前面
+            return skills
+                .sort((a, b) => {
+                    const aInstalled = this.installer.isInstalled(a) ? 0 : 1;
+                    const bInstalled = this.installer.isInstalled(b) ? 0 : 1;
+                    if (aInstalled !== bInstalled) {return aInstalled - bInstalled;}
+                    return a.name.localeCompare(b.name);
+                })
+                .map(skill => this.createSkillItem(skill, source));
         }
 
         return [];

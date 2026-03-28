@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import { execSync } from 'child_process';
 import simpleGit from 'simple-git';
 import { Source, Skill, SourceType, SkillType } from '../types';
 
@@ -151,16 +152,10 @@ export class SourceManager {
                         }
                     } else {
                         progress.report({ message: 'Cloning repository...' });
-                        // Use git raw command for PAT URLs (simple-git may mangle them)
-                        if (source.url.includes('@github.com') && source.url.includes('://')) {
-                            const args = ['clone'];
-                            if (source.branch) { args.push('-b', source.branch); }
-                            args.push(source.url, sourceDir);
-                            await simpleGit().raw(args);
-                        } else {
-                            const cloneOptions = source.branch ? ['--branch', source.branch] : [];
-                            await simpleGit().clone(source.url, sourceDir, cloneOptions);
-                        }
+                        const args = ['clone'];
+                        if (source.branch) { args.push('-b', source.branch); }
+                        args.push(source.url, sourceDir);
+                        execSync(`git ${args.map(a => `"${a}"`).join(' ')}`, { stdio: 'pipe' });
                     }
                 } else {
                     progress.report({ message: 'Reading local path...' });

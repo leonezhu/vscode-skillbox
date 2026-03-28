@@ -23,7 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
     const updateTitle = () => {
         const config = vscode.workspace.getConfiguration('skillbox');
         const agent = config.get<AgentType>('defaultAgent', 'copilot');
-        treeView.title = `SKILLBOX [${agent.toUpperCase()}]`;
+        treeView.title = `[${agent.toUpperCase()}]`;
     };
     updateTitle();
 

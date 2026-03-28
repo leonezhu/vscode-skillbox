@@ -160,13 +160,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
                 
-                // 如果只有一个选项且默认是 project，直接安装
-                if (items.length === 1 && projectPath) {
-                    await installer.installToPath(skill, projectPath);
-                    skillBoxProvider.refresh();
-                    return;
-                }
-                
+                // 总是弹出选择器
                 const picked = await vscode.window.showQuickPick(items, {
                     placeHolder: `Where to install "${skill.name}"?`
                 });
@@ -182,7 +176,21 @@ export function activate(context: vscode.ExtensionContext) {
         // Update Skill
         vscode.commands.registerCommand('skillbox.updateSkill', async (node) => {
             if (node?.skill) {
-                await installer.update(node.skill);
+                const skill = node.skill;
+                const config = vscode.workspace.getConfiguration('skillbox');
+                const agent = config.get<AgentType>('defaultAgent', 'copilot');
+
+                const projectPath = installer.getProjectSkillPath(skill);
+                
+                if (projectPath) {
+                    await installer.installToPath(skill, projectPath);
+                } else {
+                    // 没有项目路径，弹出选择器
+                    const globalPath = installer.getInstallPath(skill, agent, 'global');
+                    if (globalPath) {
+                        await installer.installToPath(skill, globalPath);
+                    }
+                }
                 skillBoxProvider.refresh();
             }
         }),

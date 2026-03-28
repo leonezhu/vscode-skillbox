@@ -31,9 +31,9 @@ export class SkillInstaller {
             const projectRoot = workspaceFolders[0].uri.fsPath;
             return this.resolveProjectPath(skill, agent, projectRoot);
         } else {
-            // Global installs go to ~/.skillbox/ (the central hub)
-            const centralRepo = this.sourceManager.getCentralRepo();
-            return this.resolveGlobalPath(skill, agent, centralRepo);
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (!homeDir) { return null; }
+            return this.resolveGlobalPath(skill, agent, homeDir);
         }
     }
 
@@ -216,18 +216,24 @@ export class SkillInstaller {
         return path.join(basePath, agentPaths.project, skill.name);
     }
 
-    private resolveGlobalPath(skill: Skill, agent: AgentType, centralRepo: string): string {
+    private resolveGlobalPath(skill: Skill, agent: AgentType, homeDir: string): string {
         if (skill.type === 'special') {
-            const sourceName = this.sourceManager.getSourceName(skill.sourceId);
-            const sourceDir = sourceName.replace(/[\/\\]/g, '-');
-            return path.join(centralRepo, 'special', sourceDir, skill.name.toLowerCase());
+            if (skill.name === 'copilot-instructions.md') {
+                return path.join(homeDir, '.github', 'copilot-instructions.md');
+            } else if (skill.name === 'AGENT.md' || skill.name === 'CLAUDE.md') {
+                return path.join(homeDir, skill.name);
+            }
         }
+
         if (skill.type === 'instruction') {
-            return path.join(centralRepo, 'instructions', `${skill.name}.instructions.md`);
+            return path.join(homeDir, '.agents', 'instructions', `${skill.name}.instructions.md`);
         } else if (skill.type === 'agent') {
-            return path.join(centralRepo, 'agents', `${skill.name}.agent.md`);
+            return path.join(homeDir, '.agents', 'agents', `${skill.name}.agent.md`);
         }
-        return path.join(centralRepo, 'skills', skill.name);
+
+        const agentPaths = getAgentPaths(agent);
+        const globalBase = agentPaths.global.replace(/^~/, homeDir);
+        return path.join(globalBase, skill.name);
     }
 
     private async copyDirectory(src: string, dest: string): Promise<void> {

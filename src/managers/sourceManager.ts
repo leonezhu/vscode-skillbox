@@ -155,7 +155,7 @@ export class SourceManager {
                         const args = ['clone'];
                         if (source.branch) { args.push('-b', source.branch); }
                         args.push(source.url, sourceDir);
-                        execSync(`git ${args.map(a => `"${a}"`).join(' ')}`, { stdio: 'pipe' });
+                        execSync(`git ${args.join(' ')}`, { stdio: 'pipe' });
                     }
                 } else {
                     progress.report({ message: 'Reading local path...' });

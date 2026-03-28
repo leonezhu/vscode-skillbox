@@ -47,11 +47,21 @@ export class SkillInstaller {
                 fs.mkdirSync(targetDir, { recursive: true });
             }
 
-            // 安装 skill
-            if (method === 'symlink') {
-                await this.linkDirectory(skill.path, targetPath);
+            // 根据资源类型安装
+            if (skill.type === 'skill') {
+                // skill 是目录，复制或链接整个目录
+                if (method === 'symlink') {
+                    await this.linkDirectory(skill.path, targetPath);
+                } else {
+                    await this.copyDirectory(skill.path, targetPath);
+                }
             } else {
-                await this.copyDirectory(skill.path, targetPath);
+                // instruction/agent/workflow 是单个文件
+                if (method === 'symlink') {
+                    await this.linkFile(skill.path, targetPath);
+                } else {
+                    fs.copyFileSync(skill.path, targetPath);
+                }
             }
 
             // 保存安装记录
@@ -94,18 +104,26 @@ export class SkillInstaller {
             }
             const projectRoot = workspaceFolders[0].uri.fsPath;
             
-            switch (agent) {
-                case 'copilot':
-                    return path.join(projectRoot, '.github', 'skills', skill.name);
-                case 'opencode':
-                    return path.join(projectRoot, '.agents', 'skills', skill.name);
-                case 'claude':
-                    return path.join(projectRoot, '.claude', 'skills', skill.name);
-                case 'cursor':
-                    return path.join(projectRoot, '.cursor', 'skills', skill.name);
-                default:
-                    return path.join(projectRoot, '.skills', skill.name);
+            // 根据目标 agent 和资源类型确定路径
+            if (agent === 'copilot') {
+                switch (skill.type) {
+                    case 'skill':
+                        return path.join(projectRoot, '.github', 'skills', skill.name);
+                    case 'instruction':
+                        return path.join(projectRoot, '.github', 'instructions', `${skill.name}.instructions.md`);
+                    case 'agent':
+                        return path.join(projectRoot, '.github', 'agents', `${skill.name}.agent.md`);
+                    case 'workflow':
+                        return path.join(projectRoot, '.github', 'prompts', 'workflows', `${skill.name}.md`);
+                }
+            } else if (agent === 'opencode') {
+                return path.join(projectRoot, '.agents', 'skills', skill.name);
+            } else if (agent === 'claude') {
+                return path.join(projectRoot, '.claude', 'skills', skill.name);
+            } else if (agent === 'cursor') {
+                return path.join(projectRoot, '.cursor', 'skills', skill.name);
             }
+            return path.join(projectRoot, '.skills', skill.name);
         }
         return null;
     }
@@ -195,6 +213,16 @@ export class SkillInstaller {
 
         // 创建符号链接
         fs.symlinkSync(src, dest, 'junction');
+    }
+
+    private async linkFile(src: string, dest: string): Promise<void> {
+        // 如果目标已存在，先删除
+        if (fs.existsSync(dest)) {
+            fs.unlinkSync(dest);
+        }
+
+        // 创建符号链接
+        fs.symlinkSync(src, dest, 'file');
     }
 
     private async saveInstallRecord(skill: Skill, targetPath: string): Promise<void> {

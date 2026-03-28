@@ -46,37 +46,98 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
         const source = (element as any).source as Source;
         if (source) {
             const skills = this.sourceManager.getSkills(source.id);
-            return skills.map(skill => {
-                const isInstalled = this.installer.isInstalled(skill);
-                const hasUpdate = isInstalled && this.installer.hasUpdate(skill);
+            
+            // 按类型分组
+            const grouped = this.groupByType(skills);
+            
+            // 如果有多种类型，显示分组
+            if (Object.keys(grouped).length > 1) {
+                const items: vscode.TreeItem[] = [];
                 
-                const item = new vscode.TreeItem(
-                    skill.name,
-                    vscode.TreeItemCollapsibleState.None
-                );
-                item.tooltip = skill.description || skill.name;
-                item.description = skill.type === 'instruction' ? '(instruction)' : '';
-                
-                // 设置 contextValue 用于右键菜单
-                if (hasUpdate) {
-                    item.contextValue = 'skill-has-update';
-                    item.iconPath = new vscode.ThemeIcon('sync');
-                    item.description = '⬆ Update available';
-                } else if (isInstalled) {
-                    item.contextValue = 'skill-installed';
-                    item.iconPath = new vscode.ThemeIcon('check');
-                    item.description = 'Installed';
-                } else {
-                    item.contextValue = 'skill';
-                    item.iconPath = new vscode.ThemeIcon('cloud-download');
+                for (const [type, typeSkills] of Object.entries(grouped)) {
+                    // 添加类型分组节点
+                    const typeItem = new vscode.TreeItem(
+                        this.getTypeLabel(type),
+                        vscode.TreeItemCollapsibleState.Collapsed
+                    );
+                    typeItem.iconPath = new vscode.ThemeIcon(this.getTypeIcon(type));
+                    typeItem.description = `(${typeSkills.length})`;
+                    (typeItem as any).source = source;
+                    (typeItem as any).skillType = type;
+                    items.push(typeItem);
                 }
                 
-                (item as any).skill = skill;
-                (item as any).source = source;
-                return item;
-            });
+                return items;
+            }
+            
+            // 单一类型，直接显示 skills
+            return skills.map(skill => this.createSkillItem(skill, source));
+        }
+
+        // 如果是类型分组节点，显示该类型的 skills
+        const skillType = (element as any).skillType;
+        if (skillType && (element as any).source) {
+            const source = (element as any).source as Source;
+            const skills = this.sourceManager.getSkills(source.id).filter(s => s.type === skillType);
+            return skills.map(skill => this.createSkillItem(skill, source));
         }
 
         return [];
+    }
+
+    private groupByType(skills: Skill[]): Record<string, Skill[]> {
+        const grouped: Record<string, Skill[]> = {};
+        for (const skill of skills) {
+            if (!grouped[skill.type]) {
+                grouped[skill.type] = [];
+            }
+            grouped[skill.type].push(skill);
+        }
+        return grouped;
+    }
+
+    private getTypeLabel(type: string): string {
+        const labels: Record<string, string> = {
+            'skill': 'Skills',
+            'instruction': 'Instructions',
+            'agent': 'Agents',
+            'workflow': 'Workflows'
+        };
+        return labels[type] || type;
+    }
+
+    private getTypeIcon(type: string): string {
+        const icons: Record<string, string> = {
+            'skill': 'package',
+            'instruction': 'book',
+            'agent': 'hubot',
+            'workflow': 'workflow'
+        };
+        return icons[type] || 'file';
+    }
+
+    private createSkillItem(skill: Skill, source: Source): vscode.TreeItem {
+        const isInstalled = this.installer.isInstalled(skill);
+        
+        const item = new vscode.TreeItem(
+            skill.name,
+            vscode.TreeItemCollapsibleState.None
+        );
+        item.tooltip = skill.description || skill.name;
+        
+        // 设置 contextValue 用于右键菜单
+        if (isInstalled) {
+            item.contextValue = 'skill-installed';
+            item.iconPath = new vscode.ThemeIcon('check');
+            item.description = 'Installed';
+        } else {
+            item.contextValue = 'skill';
+            item.iconPath = new vscode.ThemeIcon('cloud-download');
+            item.description = '';
+        }
+        
+        (item as any).skill = skill;
+        (item as any).source = source;
+        return item;
     }
 }

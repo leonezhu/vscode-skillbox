@@ -13,6 +13,7 @@ export class SourceManager {
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
         this.loadSources();
+        this.loadSkills();
     }
 
     private loadSources() {
@@ -22,8 +23,23 @@ export class SourceManager {
         });
     }
 
+    private loadSkills() {
+        const saved = this.context.globalState.get<Record<string, Skill[]>>('skills', {});
+        Object.entries(saved).forEach(([id, skills]) => {
+            this.skills.set(id, skills);
+        });
+    }
+
     private async saveSources() {
         await this.context.globalState.update('sources', Array.from(this.sources.values()));
+    }
+
+    private async saveSkills() {
+        const skillsObj: Record<string, Skill[]> = {};
+        this.skills.forEach((skills, id) => {
+            skillsObj[id] = skills;
+        });
+        await this.context.globalState.update('skills', skillsObj);
     }
 
     async addSource(url: string, branch?: string): Promise<Source> {
@@ -54,6 +70,7 @@ export class SourceManager {
         this.sources.delete(id);
         this.skills.delete(id);
         await this.saveSources();
+        await this.saveSkills();
     }
 
     async syncSource(id: string): Promise<void> {
@@ -91,6 +108,7 @@ export class SourceManager {
             // 扫描 skills
             const skills = this.scanSkills(sourceDir, id);
             this.skills.set(id, skills);
+            await this.saveSkills();
 
             // 更新同步时间
             source.lastSync = new Date().toISOString();
@@ -105,31 +123,68 @@ export class SourceManager {
     private scanSkills(dir: string, sourceId: string): Skill[] {
         const skills: Skill[] = [];
         
-        // 扫描 skills/ 目录
-        const skillsDir = path.join(dir, 'skills');
-        if (fs.existsSync(skillsDir)) {
-            fs.readdirSync(skillsDir, { withFileTypes: true })
-                .filter(d => d.isDirectory())
-                .forEach(d => {
-                    const skillPath = path.join(skillsDir, d.name);
-                    const skill = this.parseSkill(skillPath, d.name, 'skill', sourceId);
-                    if (skill) {skills.push(skill);}
-                });
-        }
+        // 递归查找所有 SKILL.md 文件
+        this.findSkillFiles(dir, sourceId, skills);
+        
+        // 如果没找到 SKILL.md，回退到传统扫描方式
+        if (skills.length === 0) {
+            // 扫描 skills/ 目录
+            const skillsDir = path.join(dir, 'skills');
+            if (fs.existsSync(skillsDir)) {
+                fs.readdirSync(skillsDir, { withFileTypes: true })
+                    .filter(d => d.isDirectory())
+                    .forEach(d => {
+                        const skillPath = path.join(skillsDir, d.name);
+                        const skill = this.parseSkill(skillPath, d.name, 'skill', sourceId);
+                        if (skill) {skills.push(skill);}
+                    });
+            }
 
-        // 扫描 instructions/ 目录
-        const instructionsDir = path.join(dir, 'instructions');
-        if (fs.existsSync(instructionsDir)) {
-            fs.readdirSync(instructionsDir, { withFileTypes: true })
-                .filter(d => d.isDirectory())
-                .forEach(d => {
-                    const instructionPath = path.join(instructionsDir, d.name);
-                    const skill = this.parseSkill(instructionPath, d.name, 'instruction', sourceId);
-                    if (skill) {skills.push(skill);}
-                });
+            // 扫描 instructions/ 目录
+            const instructionsDir = path.join(dir, 'instructions');
+            if (fs.existsSync(instructionsDir)) {
+                fs.readdirSync(instructionsDir, { withFileTypes: true })
+                    .filter(d => d.isDirectory())
+                    .forEach(d => {
+                        const instructionPath = path.join(instructionsDir, d.name);
+                        const skill = this.parseSkill(instructionPath, d.name, 'instruction', sourceId);
+                        if (skill) {skills.push(skill);}
+                    });
+            }
         }
 
         return skills;
+    }
+
+    private findSkillFiles(dir: string, sourceId: string, skills: Skill[]) {
+        // 忽略的目录
+        const ignoreDirs = ['node_modules', '.git', 'out', 'dist', 'build'];
+        
+        const scanDirectory = (currentDir: string) => {
+            try {
+                const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+                
+                for (const entry of entries) {
+                    if (entry.isDirectory()) {
+                        if (ignoreDirs.includes(entry.name)) {continue;}
+                        scanDirectory(path.join(currentDir, entry.name));
+                    } else if (entry.name === 'SKILL.md') {
+                        // 找到 SKILL.md，解析这个目录
+                        const skillDir = path.dirname(path.join(currentDir, entry.name));
+                        const relativePath = path.relative(dir, skillDir);
+                        const skillName = path.basename(skillDir);
+                        const skill = this.parseSkill(skillDir, skillName, 'skill', sourceId);
+                        if (skill) {
+                            skills.push(skill);
+                        }
+                    }
+                }
+            } catch {
+                // 忽略无权限目录
+            }
+        };
+
+        scanDirectory(dir);
     }
 
     private parseSkill(dir: string, name: string, type: 'skill' | 'instruction', sourceId: string): Skill | null {

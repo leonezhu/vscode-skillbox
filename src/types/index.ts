@@ -5,7 +5,7 @@ export type SourceType = 'github' | 'local';
 export type SkillType = 'skill' | 'instruction';
 
 // Agent 类型
-export type AgentType = 'copilot' | 'openclaw' | 'claude' | 'cursor';
+export type AgentType = 'copilot' | 'opencode' | 'claude' | 'cursor';
 
 // 安装范围
 export type InstallScope = 'project' | 'global';

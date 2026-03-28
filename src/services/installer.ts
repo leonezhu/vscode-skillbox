@@ -85,7 +85,7 @@ export class SkillInstaller {
                         return path.join(projectRoot, '.github', 'instructions', skill.name);
                     }
                     return path.join(projectRoot, '.github', 'skills', skill.name);
-                case 'openclaw':
+                case 'opencode':
                     return path.join(projectRoot, '.agents', 'skills', skill.name);
                 case 'claude':
                     return path.join(projectRoot, '.claude', 'skills', skill.name);
@@ -102,8 +102,8 @@ export class SkillInstaller {
             switch (agent) {
                 case 'copilot':
                     return path.join(homeDir, '.github', 'copilot', 'skills', skill.name);
-                case 'openclaw':
-                    return path.join(homeDir, '.openclaw', 'skills', skill.name);
+                case 'opencode':
+                    return path.join(homeDir, '.agents', 'skills', skill.name);
                 case 'claude':
                     return path.join(homeDir, '.claude', 'skills', skill.name);
                 case 'cursor':

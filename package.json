@@ -116,10 +116,10 @@
         },
         "skillbox.defaultAgent": {
           "type": "string",
-          "enum": ["copilot", "openclaw", "claude", "cursor"],
+          "enum": ["copilot", "opencode", "claude", "cursor"],
           "enumDescriptions": [
             "GitHub Copilot - skills to .github/skills",
-            "OpenClaw - skills to .agents/skills",
+            "OpenCode - skills to .agents/skills",
             "Claude - skills to .claude/skills",
             "Cursor - skills to .cursor/skills"
           ],

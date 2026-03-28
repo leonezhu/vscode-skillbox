@@ -44,34 +44,60 @@ export class SkillInstaller {
             cancellable: false
         }, async () => {
             const centralRepo = this.sourceManager.getCentralRepo();
-            const hubPath = this.getHubPath(skill, centralRepo);
-            const hubDir = path.dirname(hubPath);
-            if (!fs.existsSync(hubDir)) {
-                fs.mkdirSync(hubDir, { recursive: true });
-            }
+            const sourcePath = this.sourceManager.getSourcePath(skill.sourceId);
+            const isFromHub = sourcePath === centralRepo || path.resolve(sourcePath) === path.resolve(centralRepo);
 
+            // Ensure target dir exists
             const targetDir = path.dirname(targetPath);
             if (!fs.existsSync(targetDir)) {
                 fs.mkdirSync(targetDir, { recursive: true });
             }
 
-            if (method === 'copy') {
-                // Copy: hub gets a copy, project gets a copy
-                if (skill.type === 'skill') {
-                    await this.copyDirectory(skill.path, hubPath);
-                    await this.copyDirectory(skill.path, targetPath);
+            if (isFromHub) {
+                // Skill is already in hub, install to project directly
+                if (method === 'symlink') {
+                    if (skill.type === 'skill') {
+                        await this.linkDirectory(skill.path, targetPath);
+                    } else {
+                        await this.linkFile(skill.path, targetPath);
+                    }
                 } else {
-                    fs.copyFileSync(skill.path, hubPath);
-                    fs.copyFileSync(skill.path, targetPath);
+                    if (skill.type === 'skill') {
+                        await this.copyDirectory(skill.path, targetPath);
+                    } else {
+                        fs.copyFileSync(skill.path, targetPath);
+                    }
                 }
             } else {
-                // Symlink: hub gets the actual copy, project symlinks to hub
+                // Skill from external source: copy to hub, then install to project
+                const hubPath = this.getHubPath(skill, centralRepo);
+                const hubDir = path.dirname(hubPath);
+                if (!fs.existsSync(hubDir)) {
+                    fs.mkdirSync(hubDir, { recursive: true });
+                }
+
+                // Always copy to hub
                 if (skill.type === 'skill') {
                     await this.copyDirectory(skill.path, hubPath);
-                    await this.linkDirectory(hubPath, targetPath);
                 } else {
                     fs.copyFileSync(skill.path, hubPath);
-                    await this.linkFile(hubPath, targetPath);
+                }
+
+                // Install to project
+                if (method === 'symlink') {
+                    // Symlink: project -> hub
+                    if (skill.type === 'skill') {
+                        await this.linkDirectory(hubPath, targetPath);
+                    } else {
+                        await this.linkFile(hubPath, targetPath);
+                    }
+                } else {
+                    // Copy: independent copy in project
+                    if (skill.type === 'skill') {
+                        await this.copyDirectory(hubPath, targetPath);
+                    } else {
+                        fs.copyFileSync(hubPath, targetPath);
+                    }
                 }
             }
 

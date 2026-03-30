@@ -49,8 +49,8 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             const skills = this.sourceManager.getSkills(source.id).filter(s => s.type === skillType);
             return skills
                 .sort((a, b) => {
-                    const aInstalled = this.installer.isInstalled(a) ? 0 : 1;
-                    const bInstalled = this.installer.isInstalled(b) ? 0 : 1;
+                    const aInstalled = this.installer.getInstallInfo(a) ? 0 : 1;
+                    const bInstalled = this.installer.getInstallInfo(b) ? 0 : 1;
                     if (aInstalled !== bInstalled) {return aInstalled - bInstalled;}
                     return a.name.localeCompare(b.name);
                 })
@@ -88,8 +88,8 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             // 按类型分组，已安装的排在前面
             return skills
                 .sort((a, b) => {
-                    const aInstalled = this.installer.isInstalled(a) ? 0 : 1;
-                    const bInstalled = this.installer.isInstalled(b) ? 0 : 1;
+                    const aInstalled = this.installer.getInstallInfo(a) ? 0 : 1;
+                    const bInstalled = this.installer.getInstallInfo(b) ? 0 : 1;
                     if (aInstalled !== bInstalled) {return aInstalled - bInstalled;}
                     return a.name.localeCompare(b.name);
                 })
@@ -131,7 +131,7 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
     }
 
     private createSkillItem(skill: Skill, source: Source): vscode.TreeItem {
-        const isInstalled = this.installer.isInstalled(skill);
+        const installInfo = this.installer.getInstallInfo(skill);
         
         const item = new vscode.TreeItem(
             skill.name,
@@ -139,11 +139,11 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
         );
         item.tooltip = skill.description || skill.name;
         
-        // 设置 contextValue 用于右键菜单
-        if (isInstalled) {
+        if (installInfo) {
             item.contextValue = 'skill-installed';
             item.iconPath = new vscode.ThemeIcon('check');
-            item.description = 'Installed';
+            const scopeLabel = installInfo.scope === 'global' ? 'Global' : 'Project';
+            item.description = `Installed (${scopeLabel})`;
         } else {
             item.contextValue = 'skill';
             item.iconPath = new vscode.ThemeIcon('cloud-download');

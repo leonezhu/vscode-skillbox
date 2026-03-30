@@ -91,14 +91,26 @@ export function activate(context: vscode.ExtensionContext) {
                 const agent = config.get<AgentType>('defaultAgent', 'github-copilot');
 
                 // Choose scope
-                const projectPath = installer.getInstallPath(skills[0], agent, 'project');
-                const globalPath = installer.getInstallPath(skills[0], agent, 'global');
+                const workspaceFolders = vscode.workspace.workspaceFolders;
                 const scopeItems: vscode.QuickPickItem[] = [];
-                if (projectPath) {
-                    scopeItems.push({ label: 'Install to Project', description: getAgentPaths(agent).project });
+                
+                if (workspaceFolders && workspaceFolders.length > 0) {
+                    if (workspaceFolders.length === 1) {
+                        const projectRoot = workspaceFolders[0].uri.fsPath;
+                        const projectPath = installer.getInstallPath(skills[0], agent, 'project', projectRoot);
+                        if (projectPath) {
+                            scopeItems.push({ label: 'Install to Project', description: getAgentPaths(agent).project });
+                        }
+                    } else {
+                        for (const folder of workspaceFolders) {
+                            const folderName = path.basename(folder.uri.fsPath);
+                            scopeItems.push({ label: `$(folder) ${folderName}`, description: folder.uri.fsPath });
+                        }
+                    }
                 }
+                const globalPath = installer.getInstallPath(skills[0], agent, 'global');
                 if (globalPath) {
-                    scopeItems.push({ label: 'Install to Global', description: getAgentPaths(agent).global });
+                    scopeItems.push({ label: '$(home) Install to Global', description: getAgentPaths(agent).global });
                 }
                 if (scopeItems.length === 0) {
                     vscode.window.showErrorMessage('Please open a project folder first');
@@ -108,7 +120,23 @@ export function activate(context: vscode.ExtensionContext) {
                     placeHolder: `Install all ${skills.length} resources from ${node.label}?`
                 });
                 if (!scopePicked) { return; }
-                const scope: InstallScope = scopePicked.label.includes('Project') ? 'project' : 'global';
+                
+                // Determine scope and project root
+                let scope: InstallScope;
+                let projectRoot: string | undefined;
+                if (scopePicked.label.includes('Global')) {
+                    scope = 'global';
+                } else {
+                    scope = 'project';
+                    // If multiple folders, find the selected one
+                    if (workspaceFolders && workspaceFolders.length > 1) {
+                        const selectedName = scopePicked.label.replace('$(folder) ', '');
+                        const selected = workspaceFolders.find(f => path.basename(f.uri.fsPath) === selectedName);
+                        projectRoot = selected?.uri.fsPath;
+                    } else {
+                        projectRoot = workspaceFolders?.[0]?.uri.fsPath;
+                    }
+                }
 
                 // Choose method
                 const methodItems: vscode.QuickPickItem[] = [
@@ -125,7 +153,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const toInstall: Skill[] = [];
                 const alreadyInstalled: Skill[] = [];
                 for (const skill of skills) {
-                    const targetPath = installer.getInstallPath(skill, agent, scope);
+                    const targetPath = installer.getInstallPath(skill, agent, scope, projectRoot);
                     if (targetPath && installer.isInstalled(skill)) {
                         alreadyInstalled.push(skill);
                     } else {
@@ -166,7 +194,7 @@ export function activate(context: vscode.ExtensionContext) {
                     let installed = 0;
                     for (const skill of toInstall) {
                         progress.report({ message: `[${++installed}/${toInstall.length}] ${skill.name}` });
-                        const targetPath = installer.getInstallPath(skill, agent, scope);
+                        const targetPath = installer.getInstallPath(skill, agent, scope, projectRoot);
                         if (targetPath) {
                             try {
                                 await installer.installToPath(skill, targetPath, method);
@@ -241,9 +269,22 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('skillbox.openSkillFile', async (node) => {
             if (node?.skill) {
                 const skill = node.skill;
-                const filePath = skill.type === 'skill'
-                    ? path.join(skill.path, 'SKILL.md')
-                    : skill.path;
+                
+                // If installed, open the installed version
+                const installInfo = installer.getInstallInfo(skill);
+                let filePath: string;
+                if (installInfo) {
+                    filePath = installInfo.targetPath;
+                    if (skill.type === 'skill') {
+                        filePath = path.join(filePath, 'SKILL.md');
+                    }
+                } else {
+                    // Not installed, open from cache
+                    filePath = skill.type === 'skill'
+                        ? path.join(skill.path, 'SKILL.md')
+                        : skill.path;
+                }
+                
                 if (fs.existsSync(filePath)) {
                     const doc = await vscode.workspace.openTextDocument(filePath);
                     await vscode.window.showTextDocument(doc, { preview: true });
@@ -260,34 +301,47 @@ export function activate(context: vscode.ExtensionContext) {
                 const config = vscode.workspace.getConfiguration('skillbox');
                 const agent = config.get<AgentType>('defaultAgent', 'copilot');
                 
-                // 计算项目路径和全局路径
                 const workspaceFolders = vscode.workspace.workspaceFolders;
-                const projectRoot = workspaceFolders?.[0]?.uri.fsPath;
-                
-                let projectPath: string | null = null;
-                let globalPath: string | null = null;
-                
-                if (projectRoot) {
-                    projectPath = installer.getInstallPath(skill, agent, 'project');
-                }
-                globalPath = installer.getInstallPath(skill, agent, 'global');
                 
                 // 构建选项列表
                 const items: vscode.QuickPickItem[] = [];
                 
-                if (projectPath) {
-                    const shortPath = projectRoot ? projectPath.replace(projectRoot, '.') : projectPath;
-                    items.push({
-                        label: 'Install to Project',
-                        description: shortPath,
-                        detail: projectPath
-                    });
+                // 如果有多个 workspace folder，为每个添加选项
+                if (workspaceFolders && workspaceFolders.length > 0) {
+                    if (workspaceFolders.length === 1) {
+                        // 单项目：直接用 "Install to Project"
+                        const projectRoot = workspaceFolders[0].uri.fsPath;
+                        const projectPath = installer.getInstallPath(skill, agent, 'project', projectRoot);
+                        if (projectPath) {
+                            items.push({
+                                label: 'Install to Project',
+                                description: projectPath.replace(projectRoot, '.'),
+                                detail: projectPath
+                            });
+                        }
+                    } else {
+                        // 多项目：列出每个项目
+                        for (const folder of workspaceFolders) {
+                            const folderPath = folder.uri.fsPath;
+                            const folderName = path.basename(folderPath);
+                            const projectPath = installer.getInstallPath(skill, agent, 'project', folderPath);
+                            if (projectPath) {
+                                items.push({
+                                    label: `$(folder) ${folderName}`,
+                                    description: projectPath.replace(folderPath, '.'),
+                                    detail: projectPath
+                                });
+                            }
+                        }
+                    }
                 }
                 
+                // 全局安装选项
+                const globalPath = installer.getInstallPath(skill, agent, 'global');
                 if (globalPath) {
                     const homeDir = process.env.HOME || '';
                     items.push({
-                        label: 'Install to Global',
+                        label: '$(home) Install to Global',
                         description: globalPath.startsWith(homeDir) ? globalPath.replace(homeDir, '~') : globalPath,
                         detail: globalPath
                     });
@@ -298,7 +352,6 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
                 
-                // 总是弹出选择器
                 const picked = await vscode.window.showQuickPick(items, {
                     placeHolder: `Where to install "${skill.name}"?`
                 });
@@ -307,7 +360,6 @@ export function activate(context: vscode.ExtensionContext) {
                 
                 const targetPath = picked.detail!;
                 
-                // 选择安装方式
                 const methodItems: vscode.QuickPickItem[] = [
                     { label: 'Copy', description: 'Copy files to target location' },
                     { label: 'Symlink', description: 'Create symbolic link' }

@@ -23,12 +23,13 @@ export class SkillInstaller {
         await this.context.globalState.update('installRecords', Array.from(this.installRecords.values()));
     }
 
-    getInstallPath(skill: Skill, agent: AgentType, scope: InstallScope): string | null {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-
+    getInstallPath(skill: Skill, agent: AgentType, scope: InstallScope, projectRoot?: string): string | null {
         if (scope === 'project') {
-            if (!workspaceFolders || workspaceFolders.length === 0) { return null; }
-            const projectRoot = workspaceFolders[0].uri.fsPath;
+            if (!projectRoot) {
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders || workspaceFolders.length === 0) { return null; }
+                projectRoot = workspaceFolders[0].uri.fsPath;
+            }
             return this.resolveProjectPath(skill, agent, projectRoot);
         } else {
             const homeDir = process.env.HOME || process.env.USERPROFILE;
@@ -111,6 +112,21 @@ export class SkillInstaller {
         await this.installToPath(skill, this.getProjectSkillPath(skill) || '');
     }
 
+    getInstallInfo(skill: Skill): { scope: InstallScope; targetPath: string } | null {
+        const record = this.installRecords.get(skill.id);
+        if (record?.targetPath && fs.existsSync(record.targetPath)) {
+            // Check if target is inside any workspace folder
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            const isInWorkspace = workspaceFolders?.some(f => record.targetPath.startsWith(f.uri.fsPath + path.sep) || record.targetPath === f.uri.fsPath);
+            return { scope: isInWorkspace ? 'project' : 'global', targetPath: record.targetPath };
+        }
+        const projectPath = this.getProjectSkillPath(skill);
+        if (projectPath && fs.existsSync(projectPath)) {
+            return { scope: 'project', targetPath: projectPath };
+        }
+        return null;
+    }
+
     isInstalled(skill: Skill): boolean {
         const record = this.installRecords.get(skill.id);
         if (record?.targetPath && fs.existsSync(record.targetPath)) {
@@ -143,13 +159,15 @@ export class SkillInstaller {
         return false;
     }
 
-    getProjectSkillPath(skill: Skill): string | null {
+    getProjectSkillPath(skill: Skill, projectRoot?: string): string | null {
         const config = vscode.workspace.getConfiguration('skillbox');
         const agent = config.get<AgentType>('defaultAgent', 'copilot');
-        const workspaceFolders = vscode.workspace.workspaceFolders;
 
-        if (!workspaceFolders || workspaceFolders.length === 0) { return null; }
-        const projectRoot = workspaceFolders[0].uri.fsPath;
+        if (!projectRoot) {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) { return null; }
+            projectRoot = workspaceFolders[0].uri.fsPath;
+        }
         return this.resolveProjectPath(skill, agent, projectRoot);
     }
 

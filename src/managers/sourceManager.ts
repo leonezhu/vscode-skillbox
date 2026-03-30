@@ -76,6 +76,19 @@ export class SourceManager {
         return cacheDir;
     }
 
+    private getCacheKey(source: Source): string {
+        if (source.type === 'local') {
+            return `local-${path.basename(source.url)}`;
+        }
+        // e.g. "owner-repo" or "owner-repo-main"
+        const base = source.name.replace(/\//g, '-');
+        return source.branch ? `${base}-${source.branch}` : base;
+    }
+
+    private getCachePath(source: Source): string {
+        return path.join(this.getCacheDir(), this.getCacheKey(source));
+    }
+
     async addSource(url: string, branch?: string): Promise<Source> {
         const id = crypto.randomUUID();
 
@@ -109,10 +122,15 @@ export class SourceManager {
     async removeSource(id: string): Promise<void> {
         const source = this.sources.get(id);
         if (source && source.type === 'github') {
-            // 删除缓存
-            const cachePath = path.join(this.getCacheDir(), id);
+            // 删除新命名格式的缓存
+            const cachePath = this.getCachePath(source);
             if (fs.existsSync(cachePath)) {
                 fs.rmSync(cachePath, { recursive: true });
+            }
+            // 清理旧 UUID 格式的缓存目录
+            const oldCachePath = path.join(this.getCacheDir(), id);
+            if (fs.existsSync(oldCachePath)) {
+                fs.rmSync(oldCachePath, { recursive: true });
             }
         }
 
@@ -123,63 +141,80 @@ export class SourceManager {
     }
 
     async syncSource(id: string): Promise<void> {
+        try {
+            await this.doSync(id, false);
+            const source = this.sources.get(id);
+            const msg = `Synced ${source?.name}: ${this.skills.get(id)?.length || 0} resources found`;
+            vscode.window.setStatusBarMessage(msg, 3000);
+        } catch (error) {
+            const source = this.sources.get(id);
+            vscode.window.showErrorMessage(`Failed to sync ${source?.name}: ${error}`);
+        }
+    }
+
+    async syncSourceSilent(id: string): Promise<void> {
+        try {
+            await this.doSync(id, true);
+        } catch {
+            // silent
+        }
+    }
+
+    private async doSync(id: string, silent: boolean): Promise<void> {
         const source = this.sources.get(id);
         if (!source) { return; }
 
-        try {
-            let sourceDir: string;
+        let sourceDir: string;
+        const sync = async (report?: (msg: string) => void) => {
+            if (source.type === 'github') {
+                sourceDir = this.getCachePath(source);
 
+                if (fs.existsSync(sourceDir)) {
+                    const git = simpleGit(sourceDir);
+                    const branch = source.branch || (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+                    await git.checkout(branch);
+                    try {
+                        await git.pull('origin', branch);
+                    } catch {
+                        await git.fetch('origin');
+                        await git.reset(['--hard', `origin/${branch}`]);
+                    }
+                } else {
+                    execSync(`git clone ${source.url} "${sourceDir}"`, { stdio: 'pipe' });
+                    if (source.branch) {
+                        execSync(`git fetch origin "${source.branch}" && git checkout "${source.branch}"`, { cwd: sourceDir, stdio: 'pipe' });
+                    }
+                }
+            } else {
+                report?.('Reading local path...');
+                sourceDir = source.url;
+                if (!fs.existsSync(sourceDir)) {
+                    if (!silent) {
+                        vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
+                    }
+                    return;
+                }
+            }
+
+            report?.('Scanning resources...');
+            const skills = this.scanSkills(sourceDir, id);
+            this.skills.set(id, skills);
+            await this.saveSkills();
+
+            source.lastSync = new Date().toISOString();
+            await this.saveSources();
+        };
+
+        if (silent) {
+            await sync();
+        } else {
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: `Syncing ${source.name}...`,
                 cancellable: false
             }, async (progress) => {
-                if (source.type === 'github') {
-                    progress.report({ message: 'Cloning repository...' });
-                    const cacheDir = this.getCacheDir();
-                    sourceDir = path.join(cacheDir, id);
-
-                    if (fs.existsSync(sourceDir)) {
-                        progress.report({ message: 'Updating repository...' });
-                        const git = simpleGit(sourceDir);
-                        const branch = source.branch || (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
-                        await git.checkout(branch);
-                        try {
-                            await git.pull('origin', branch);
-                        } catch {
-                            await git.fetch('origin');
-                            await git.reset(['--hard', `origin/${branch}`]);
-                        }
-                    } else {
-                        progress.report({ message: 'Cloning repository...' });
-                        // Clone default branch first, then checkout target branch
-                        execSync(`git clone ${source.url} "${sourceDir}"`, { stdio: 'pipe' });
-                        if (source.branch) {
-                            progress.report({ message: `Switching to branch ${source.branch}...` });
-                            execSync(`git fetch origin "${source.branch}" && git checkout "${source.branch}"`, { cwd: sourceDir, stdio: 'pipe' });
-                        }
-                    }
-                } else {
-                    progress.report({ message: 'Reading local path...' });
-                    sourceDir = source.url;
-                    if (!fs.existsSync(sourceDir)) {
-                        vscode.window.showErrorMessage(`Local path does not exist: ${source.url}`);
-                        return;
-                    }
-                }
-
-                progress.report({ message: 'Scanning resources...' });
-                const skills = this.scanSkills(sourceDir, id);
-                this.skills.set(id, skills);
-                await this.saveSkills();
-
-                source.lastSync = new Date().toISOString();
-                await this.saveSources();
+                await sync(msg => progress.report({ message: msg }));
             });
-
-            vscode.window.showInformationMessage(`Synced ${source.name}: ${this.skills.get(id)?.length || 0} resources found`);
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to sync ${source.name}: ${error}`);
         }
     }
 
@@ -191,7 +226,7 @@ export class SourceManager {
         for (const sd of skillDirPaths) {
             const fullDir = path.join(dir, sd);
             if (fs.existsSync(fullDir)) {
-                this.scanSkillsRecursive(fullDir, sourceId, skills);
+                this.scanSkillsRecursive(fullDir, sourceId, skills, dir);
             }
         }
 
@@ -204,7 +239,7 @@ export class SourceManager {
                     .filter(f => f.endsWith('.instructions.md'))
                     .forEach(f => {
                         const fp = path.join(fullDir, f);
-                        const skill = this.parseInstructionFile(fp, f, 'instruction', sourceId);
+                        const skill = this.parseInstructionFile(fp, f, 'instruction', sourceId, dir);
                         if (skill) { skills.push(skill); }
                     });
             }
@@ -219,7 +254,7 @@ export class SourceManager {
                     .filter(f => f.endsWith('.agent.md'))
                     .forEach(f => {
                         const fp = path.join(fullDir, f);
-                        const skill = this.parseInstructionFile(fp, f, 'agent', sourceId);
+                        const skill = this.parseInstructionFile(fp, f, 'agent', sourceId, dir);
                         if (skill) { skills.push(skill); }
                     });
             }
@@ -230,13 +265,13 @@ export class SourceManager {
         for (const specialFile of specialFiles) {
             const specialPath = path.join(dir, specialFile);
             if (fs.existsSync(specialPath)) {
-                const skill = this.parseInstructionFile(specialPath, specialFile, 'special', sourceId);
+                const skill = this.parseInstructionFile(specialPath, specialFile, 'special', sourceId, dir);
                 if (skill) { skills.push(skill); }
             }
         }
 
         // 5. Recursively find SKILL.md files anywhere else
-        this.findSkillFiles(dir, sourceId, skills);
+        this.findSkillFiles(dir, sourceId, skills, dir);
 
         // Deduplicate by path
         const seen = new Set<string>();
@@ -247,22 +282,25 @@ export class SourceManager {
         });
     }
 
-    private scanSkillsRecursive(skillsDir: string, sourceId: string, skills: Skill[]) {
+    private scanSkillsRecursive(skillsDir: string, sourceId: string, skills: Skill[], sourceDir: string) {
         fs.readdirSync(skillsDir, { withFileTypes: true })
             .filter(d => d.isDirectory())
             .forEach(d => {
                 const skillPath = path.join(skillsDir, d.name);
                 if (fs.existsSync(path.join(skillPath, 'SKILL.md'))) {
-                    const skill = this.parseSkillDir(skillPath, d.name, 'skill', sourceId);
+                    const skill = this.parseSkillDir(skillPath, d.name, 'skill', sourceId, sourceDir);
                     if (skill) { skills.push(skill); }
                 } else {
-                    // No SKILL.md here, go deeper
-                    this.scanSkillsRecursive(skillPath, sourceId, skills);
+                    this.scanSkillsRecursive(skillPath, sourceId, skills, sourceDir);
                 }
             });
     }
 
-    private parseSkillDir(dir: string, name: string, type: SkillType, sourceId: string): Skill | null {
+    private stableSkillId(sourceId: string, relativePath: string): string {
+        return crypto.createHash('md5').update(`${sourceId}:${relativePath}`).digest('hex').slice(0, 16);
+    }
+
+    private parseSkillDir(dir: string, name: string, type: SkillType, sourceId: string, sourceDir: string): Skill | null {
         const skillFile = path.join(dir, 'SKILL.md');
         let description = '';
 
@@ -273,7 +311,7 @@ export class SourceManager {
         }
 
         return {
-            id: crypto.randomUUID(),
+            id: this.stableSkillId(sourceId, path.relative(sourceDir, dir)),
             name,
             description,
             path: dir,
@@ -282,7 +320,7 @@ export class SourceManager {
         };
     }
 
-    private parseInstructionFile(filePath: string, filename: string, type: SkillType, sourceId: string): Skill | null {
+    private parseInstructionFile(filePath: string, filename: string, type: SkillType, sourceId: string, sourceDir: string): Skill | null {
         const content = fs.readFileSync(filePath, 'utf-8');
 
         let name = filename;
@@ -305,7 +343,7 @@ export class SourceManager {
         }
 
         return {
-            id: crypto.randomUUID(),
+            id: this.stableSkillId(sourceId, path.relative(sourceDir, filePath)),
             name,
             description,
             path: filePath,
@@ -314,7 +352,7 @@ export class SourceManager {
         };
     }
 
-    private findSkillFiles(dir: string, sourceId: string, skills: Skill[]) {
+    private findSkillFiles(dir: string, sourceId: string, skills: Skill[], sourceDir: string) {
         const ignoreDirs = ['node_modules', '.git', 'out', 'dist', 'build', 'workflows', '.cache'];
 
         const scanDirectory = (currentDir: string) => {
@@ -328,7 +366,7 @@ export class SourceManager {
                     } else if (entry.name === 'SKILL.md') {
                         const skillDir = path.dirname(path.join(currentDir, entry.name));
                         const skillName = path.basename(skillDir);
-                        const skill = this.parseSkillDir(skillDir, skillName, 'skill', sourceId);
+                        const skill = this.parseSkillDir(skillDir, skillName, 'skill', sourceId, sourceDir);
                         if (skill) {
                             skills.push(skill);
                         }
@@ -361,7 +399,7 @@ export class SourceManager {
         if (source.type === 'local') {
             return source.url;
         }
-        return path.join(this.getCacheDir(), sourceId);
+        return this.getCachePath(source);
     }
 
     getSourceName(sourceId: string): string {

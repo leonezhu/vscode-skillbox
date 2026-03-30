@@ -86,6 +86,10 @@
         "icon": "$(gear)"
       },
       {
+        "command": "skillbox.viewUpdateDiff",
+        "title": "View Changes"
+      },
+      {
         "command": "skillbox.uninstallSkill",
         "title": "Uninstall"
       },
@@ -147,6 +151,11 @@
           "command": "skillbox.updateSkill",
           "when": "viewItem == skill-has-update",
           "group": "1_update"
+        },
+        {
+          "command": "skillbox.viewUpdateDiff",
+          "when": "viewItem == skill-has-update",
+          "group": "1_update@2"
         },
         {
           "command": "skillbox.uninstallSkill",

@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
+import simpleGit from 'simple-git';
 import { SkillBoxProvider } from './providers/skillboxProvider';
 import { SourceManager } from './managers/sourceManager';
 import { SkillInstaller } from './services/installer';
@@ -66,15 +68,13 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: 'Refreshing all sources...',
-                cancellable: false
-            }, async () => {
-                for (const source of sources) {
-                    await sourceManager.syncSource(source.id);
-                }
-            });
+            skillBoxProvider.manualSyncing = true;
+            for (const source of sources) {
+                skillBoxProvider.syncingSet.add(source.id);
+                try { await sourceManager.syncSource(source.id); }
+                finally { skillBoxProvider.syncingSet.delete(source.id); }
+            }
+            skillBoxProvider.manualSyncing = false;
             skillBoxProvider.refresh();
         }),
 
@@ -218,13 +218,14 @@ export function activate(context: vscode.ExtensionContext) {
         // Sync Source
         vscode.commands.registerCommand('skillbox.syncSource', async (node) => {
             if (node?.source) {
-                await vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: `Syncing ${node.label}...`,
-                    cancellable: false
-                }, async () => {
+                skillBoxProvider.manualSyncing = true;
+                skillBoxProvider.syncingSet.add(node.source.id);
+                try {
                     await sourceManager.syncSource(node.source.id);
-                });
+                } finally {
+                    skillBoxProvider.syncingSet.delete(node.source.id);
+                }
+                skillBoxProvider.manualSyncing = false;
                 skillBoxProvider.refresh();
             }
         }),
@@ -378,22 +379,76 @@ export function activate(context: vscode.ExtensionContext) {
         // Update Skill
         vscode.commands.registerCommand('skillbox.updateSkill', async (node) => {
             if (node?.skill) {
-                const skill = node.skill;
-                const config = vscode.workspace.getConfiguration('skillbox');
-                const agent = config.get<AgentType>('defaultAgent', 'copilot');
-
-                const projectPath = installer.getProjectSkillPath(skill);
-                
-                if (projectPath) {
-                    await installer.installToPath(skill, projectPath);
-                } else {
-                    // 没有项目路径，弹出选择器
-                    const globalPath = installer.getInstallPath(skill, agent, 'global');
-                    if (globalPath) {
-                        await installer.installToPath(skill, globalPath);
-                    }
-                }
+                await installer.update(node.skill);
                 skillBoxProvider.refresh();
+            }
+        }),
+
+        // View Update Diff
+        vscode.commands.registerCommand('skillbox.viewUpdateDiff', async (node) => {
+            if (node?.skill) {
+                const skill = node.skill;
+                const updateInfo = await installer.getUpdateInfo(skill);
+                if (!updateInfo) {
+                    vscode.window.showInformationMessage(`${skill.name} is already up to date`);
+                    return;
+                }
+
+                const sourcePath = sourceManager.getSourcePath(skill.sourceId);
+                if (!sourcePath) { return; }
+
+                try {
+                    const git = simpleGit(sourcePath);
+
+                    const oldHash = updateInfo.oldHash;
+                    const newHash = updateInfo.newHash;
+
+                    if (skill.type === 'skill') {
+                        const skillRelPath = path.relative(sourcePath, skill.path).replace(/\\/g, '/');
+                        // Show diff for all changed files in this skill
+                        const changedFiles = updateInfo.changedFiles;
+                        // Pick the first changed file to show in diff view
+                        const mainFile = changedFiles.find(f => f.endsWith('/SKILL.md')) || changedFiles[0];
+                        if (!mainFile) {
+                            vscode.window.showInformationMessage('No file changes to display');
+                            return;
+                        }
+                        const oldContent = await git.show([`${oldHash}:${mainFile}`]);
+                        const newContent = await git.show([`${newHash}:${mainFile}`]);
+
+                        const oldTmp = path.join(os.tmpdir(), `skillbox-${skill.name}-${path.basename(mainFile)}-${oldHash.slice(0, 7)}`);
+                        const newTmp = path.join(os.tmpdir(), `skillbox-${skill.name}-${path.basename(mainFile)}-${newHash.slice(0, 7)}`);
+                        fs.writeFileSync(oldTmp, oldContent);
+                        fs.writeFileSync(newTmp, newContent);
+
+                        const suffix = changedFiles.length > 1 ? ` (${changedFiles.length} files changed)` : '';
+                        await vscode.commands.executeCommand(
+                            'vscode.diff',
+                            vscode.Uri.file(oldTmp),
+                            vscode.Uri.file(newTmp),
+                            `${skill.name} (${oldHash.slice(0, 7)} → ${newHash.slice(0, 7)})${suffix}`
+                        );
+                    } else {
+                        const relPath = path.relative(sourcePath, skill.path).replace(/\\/g, '/');
+                        const oldContent = await git.show([`${oldHash}:${relPath}`]);
+                        const newContent = await git.show([`${newHash}:${relPath}`]);
+
+                        const ext = path.extname(skill.name) || '.md';
+                        const oldTmp = path.join(os.tmpdir(), `skillbox-${skill.name}-old-${updateInfo.oldHash.slice(0, 7)}${ext}`);
+                        const newTmp = path.join(os.tmpdir(), `skillbox-${skill.name}-new-${updateInfo.newHash.slice(0, 7)}${ext}`);
+                        fs.writeFileSync(oldTmp, oldContent);
+                        fs.writeFileSync(newTmp, newContent);
+
+                        await vscode.commands.executeCommand(
+                            'vscode.diff',
+                            vscode.Uri.file(oldTmp),
+                            vscode.Uri.file(newTmp),
+                            `${skill.name} (${updateInfo.oldHash.slice(0, 7)} → ${updateInfo.newHash.slice(0, 7)})`
+                        );
+                    }
+                } catch (e) {
+                    vscode.window.showErrorMessage(`Failed to view diff: ${e}`);
+                }
             }
         }),
 

@@ -109,7 +109,12 @@ export class SkillInstaller {
     }
 
     async update(skill: Skill): Promise<void> {
-        await this.installToPath(skill, this.getProjectSkillPath(skill) || '');
+        const installInfo = this.getInstallInfo(skill);
+        if (!installInfo) { return; }
+
+        // Re-read original method from record (default to copy)
+        const method: InstallMethod = 'copy';
+        await this.installToPath(skill, installInfo.targetPath, method);
     }
 
     getInstallInfo(skill: Skill): { scope: InstallScope; targetPath: string } | null {
@@ -155,8 +160,53 @@ export class SkillInstaller {
         return false;
     }
 
-    hasUpdate(skill: Skill): boolean {
-        return false;
+    async hasUpdate(skill: Skill): Promise<boolean> {
+        const info = await this.getUpdateInfo(skill);
+        return info !== null;
+    }
+
+    async getUpdateInfo(skill: Skill): Promise<{ oldHash: string; newHash: string; changedFiles: string[] } | null> {
+        const record = this.installRecords.get(skill.id);
+        if (!record?.commitHash) { return null; }
+
+        const installInfo = this.getInstallInfo(skill);
+        if (!installInfo) { return null; }
+
+        const sourcePath = this.sourceManager.getSourcePath(skill.sourceId);
+        if (!sourcePath || !fs.existsSync(sourcePath)) { return null; }
+
+        try {
+            const git = simpleGit(sourcePath);
+            const newHash = (await git.revparse(['HEAD'])).trim();
+            if (newHash === record.commitHash) { return null; }
+
+            // Get the skill's relative path within the source
+            const centralRepo = this.sourceManager.getCentralRepo();
+            const isFromHub = sourcePath === centralRepo || path.resolve(sourcePath) === path.resolve(centralRepo);
+            let skillRelPath: string;
+            if (isFromHub) {
+                skillRelPath = path.relative(centralRepo, skill.path);
+            } else {
+                skillRelPath = path.relative(sourcePath, skill.path);
+            }
+
+            // Ensure directory paths end with / for git to match all files inside
+            if (skill.type === 'skill') {
+                skillRelPath = skillRelPath.replace(/\\/g, '/');
+                if (!skillRelPath.endsWith('/')) {
+                    skillRelPath += '/';
+                }
+            }
+
+            // Check if this skill's files changed between commits
+            const diff = await git.diff(['--name-only', record.commitHash, newHash, '--', skillRelPath]);
+            const changedFiles = diff.split('\n').map(f => f.trim()).filter(Boolean);
+            if (changedFiles.length === 0) { return null; }
+
+            return { oldHash: record.commitHash, newHash, changedFiles };
+        } catch {
+            return null;
+        }
     }
 
     getProjectSkillPath(skill: Skill, projectRoot?: string): string | null {

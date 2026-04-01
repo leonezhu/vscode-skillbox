@@ -2,7 +2,7 @@
   "name": "skillbox",
   "displayName": "SkillBox",
   "description": "VSCode extension for managing Agent Skills from subscription sources",
-  "version": "0.1.15",
+  "version": "0.1.18",
   "publisher": "leonezhu",
   "license": "MIT",
   "repository": {
@@ -171,6 +171,11 @@
           "type": "string",
           "default": "~/.skillbox",
           "description": "Central repository path for storing synced skills (default: ~/.skillbox)"
+        },
+        "skillbox.projectInstallDirs": {
+          "type": "object",
+          "default": {},
+          "description": "Map project paths/names to custom skill install directories. Key: project absolute path or folder name. Value: directory relative to project root (e.g. \"docs/skills\")"
         },
         "skillbox.defaultAgent": {
           "type": "string",

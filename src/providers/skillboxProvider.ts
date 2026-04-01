@@ -24,29 +24,35 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
     get syncingSet(): Set<string> { return this._syncing; }
     set manualSyncing(val: boolean) { this._manualSyncing = val; }
 
+    private _isBackgroundSyncing = false;
+
     private backgroundSyncAll(): void {
-        if (this._manualSyncing) { return; }
+        if (this._manualSyncing || this._isBackgroundSyncing) { return; }
         const now = Date.now();
         if (now - this._lastBackgroundSync < SkillBoxProvider.SYNC_INTERVAL_MS) { return; }
         this._lastBackgroundSync = now;
 
-        const sources = this.sourceManager.getSources().filter(s => !this._syncing.has(s.id));
+        const sources = this.sourceManager.getSources();
         if (sources.length === 0) { return; }
 
-        // Fire-and-forget: sync in background, then refresh tree when done
+        this._isBackgroundSyncing = true;
+
+        // Fire-and-forget: sync in background (concurrent), then refresh tree when done
         (async () => {
             try {
-                for (const source of sources) {
+                await Promise.all(sources.map(async (source) => {
                     this._syncing.add(source.id);
                     try {
                         await this.sourceManager.syncSourceSilent(source.id);
                     } finally {
                         this._syncing.delete(source.id);
                     }
-                }
-                this._onDidChangeTreeData.fire();
+                }));
             } catch {
                 // silent
+            } finally {
+                this._isBackgroundSyncing = false;
+                this._onDidChangeTreeData.fire();
             }
         })();
     }
@@ -71,8 +77,8 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
                     : (source.lastSync 
                         ? `Last sync: ${new Date(source.lastSync).toLocaleString()}`
                         : 'Not synced');
-                item.contextValue = 'source';
-                item.iconPath = new vscode.ThemeIcon('folder');
+                item.contextValue = this._syncing.has(source.id) ? 'source-syncing' : 'source';
+                item.iconPath = new vscode.ThemeIcon(this._syncing.has(source.id) ? 'sync~spin' : 'folder');
                 (item as any).source = source;
                 return item;
             });

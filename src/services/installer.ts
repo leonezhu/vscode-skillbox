@@ -264,8 +264,33 @@ export class SkillInstaller {
         return path.join(centralRepo, 'skills', sourceDir, skill.name);
     }
 
+    // Get custom install directory from configuration
+    private getCustomInstallDir(projectPath: string): string | null {
+        const config = vscode.workspace.getConfiguration('skillbox');
+        const projectDirs = config.get<Record<string, string>>('projectInstallDirs', {});
+
+        // 1. Exact path match
+        if (projectDirs[projectPath]) {
+            return projectDirs[projectPath];
+        }
+
+        // 2. Project name match
+        const projectName = path.basename(projectPath);
+        if (projectDirs[projectName]) {
+            return projectDirs[projectName];
+        }
+
+        return null;
+    }
+
     // Project scope paths
     private resolveProjectPath(skill: Skill, agent: AgentType, basePath: string): string {
+        // Check custom install directory first
+        const customDir = this.getCustomInstallDir(basePath);
+        if (customDir) {
+            return path.join(basePath, customDir, skill.name);
+        }
+
         if (skill.type === 'special') {
             if (skill.name === 'copilot-instructions.md') {
                 return path.join(basePath, '.github', 'copilot-instructions.md');

@@ -124,20 +124,31 @@ export class SourceManager {
         if (source && source.type === 'github') {
             // 删除新命名格式的缓存
             const cachePath = this.getCachePath(source);
-            if (fs.existsSync(cachePath)) {
-                fs.rmSync(cachePath, { recursive: true });
-            }
+            this.safeRemove(cachePath);
             // 清理旧 UUID 格式的缓存目录
             const oldCachePath = path.join(this.getCacheDir(), id);
-            if (fs.existsSync(oldCachePath)) {
-                fs.rmSync(oldCachePath, { recursive: true });
-            }
+            this.safeRemove(oldCachePath);
         }
 
         this.sources.delete(id);
         this.skills.delete(id);
         await this.saveSources();
         await this.saveSkills();
+    }
+
+    private safeRemove(targetPath: string): void {
+        if (!fs.existsSync(targetPath)) return;
+        try {
+            fs.rmSync(targetPath, { recursive: true, force: true });
+        } catch {
+            // Windows 上可能因文件锁失败，尝试延迟重试
+            try {
+                fs.rmSync(targetPath, { recursive: true, force: true });
+            } catch {
+                // 最终失败也不阻止移除订阅，仅记录警告
+                console.warn(`Failed to remove cache: ${targetPath}`);
+            }
+        }
     }
 
     async syncSource(id: string): Promise<void> {

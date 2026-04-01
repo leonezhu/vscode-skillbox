@@ -39,6 +39,132 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Helper function to configure project install directories
+    async function configureProjectInstallDirs() {
+        const config = vscode.workspace.getConfiguration('skillbox');
+        const currentDirs = config.get<Record<string, string>>('projectInstallDirs', {});
+
+        const items: vscode.QuickPickItem[] = [
+            { label: '$(add) Add New Mapping', description: 'Add a project to directory mapping' }
+        ];
+
+        // Add existing mappings
+        for (const [project, dir] of Object.entries(currentDirs)) {
+            items.push({
+                label: `$(folder) ${project}`,
+                description: `→ ${dir}`,
+                detail: project
+            });
+        }
+
+        if (Object.keys(currentDirs).length > 0) {
+            items.push({ label: '$(trash) Clear All Mappings', description: 'Remove all project directory mappings' });
+        }
+
+        const picked = await vscode.window.showQuickPick(items, {
+            placeHolder: 'Project Install Directory Mappings'
+        });
+
+        if (!picked) { return; }
+
+        if (picked.label.includes('Add New Mapping')) {
+            // Get project identifier
+            const projectItems: vscode.QuickPickItem[] = [];
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+
+            if (workspaceFolders) {
+                for (const folder of workspaceFolders) {
+                    projectItems.push({
+                        label: `$(folder) ${path.basename(folder.uri.fsPath)}`,
+                        description: folder.uri.fsPath,
+                        detail: folder.uri.fsPath
+                    });
+                }
+            }
+            projectItems.push({ label: '$(edit) Enter Manually', description: 'Type project path or name' });
+
+            const projectPicked = await vscode.window.showQuickPick(projectItems, {
+                placeHolder: 'Select or enter project'
+            });
+
+            if (!projectPicked) { return; }
+
+            let projectKey: string;
+            if (projectPicked.label.includes('Enter Manually')) {
+                const manual = await vscode.window.showInputBox({
+                    prompt: 'Enter project path or name',
+                    placeHolder: '/path/to/project or project-name'
+                });
+                if (!manual) { return; }
+                projectKey = manual;
+            } else {
+                // Ask whether to use full path or just name
+                const useFullPath = await vscode.window.showQuickPick(
+                    [
+                        { label: 'Use folder name only', description: path.basename(projectPicked.detail!), detail: 'name' },
+                        { label: 'Use full path', description: projectPicked.detail!, detail: 'path' }
+                    ],
+                    { placeHolder: 'How to identify this project?' }
+                );
+                if (!useFullPath) { return; }
+                projectKey = useFullPath.detail === 'path' ? projectPicked.detail! : path.basename(projectPicked.detail!);
+            }
+
+            // Get install directory
+            const installDir = await vscode.window.showInputBox({
+                prompt: 'Enter install directory (relative to project root)',
+                placeHolder: 'docs/skills or .agents/custom',
+                value: '.agents/skills'
+            });
+
+            if (!installDir) { return; }
+
+            // Update config
+            const newDirs = { ...currentDirs, [projectKey]: installDir };
+            await config.update('projectInstallDirs', newDirs, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage(`Added mapping: ${projectKey} → ${installDir}`);
+
+        } else if (picked.label.includes('Clear All')) {
+            const confirm = await vscode.window.showWarningMessage(
+                'Remove all project directory mappings?',
+                'Yes', 'No'
+            );
+            if (confirm === 'Yes') {
+                await config.update('projectInstallDirs', {}, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage('All mappings cleared');
+            }
+        } else if (picked.detail) {
+            // Edit or delete existing mapping
+            const action = await vscode.window.showQuickPick(
+                [
+                    { label: '$(edit) Edit', description: 'Change the install directory' },
+                    { label: '$(trash) Delete', description: 'Remove this mapping' }
+                ],
+                { placeHolder: `Mapping: ${picked.detail} → ${currentDirs[picked.detail]}` }
+            );
+
+            if (!action) { return; }
+
+            if (action.label.includes('Delete')) {
+                const newDirs = { ...currentDirs };
+                delete newDirs[picked.detail];
+                await config.update('projectInstallDirs', newDirs, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage(`Removed mapping for ${picked.detail}`);
+            } else {
+                const newDir = await vscode.window.showInputBox({
+                    prompt: 'Enter new install directory',
+                    value: currentDirs[picked.detail],
+                    placeHolder: 'docs/skills'
+                });
+                if (newDir) {
+                    const newDirs = { ...currentDirs, [picked.detail]: newDir };
+                    await config.update('projectInstallDirs', newDirs, vscode.ConfigurationTarget.Global);
+                    vscode.window.showInformationMessage(`Updated mapping: ${picked.detail} → ${newDir}`);
+                }
+            }
+        }
+    }
+
     // Register Commands
     context.subscriptions.push(
         treeView,
@@ -211,8 +337,29 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         // Open Settings
-        vscode.commands.registerCommand('skillbox.openSettings', () => {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'skillbox');
+        vscode.commands.registerCommand('skillbox.openSettings', async () => {
+            const items: vscode.QuickPickItem[] = [
+                { label: '$(gear) Default Agent', description: 'Configure default agent type' },
+                { label: '$(folder) Project Install Directories', description: 'Configure custom install paths per project' },
+                { label: '$(home) Central Repository', description: 'Configure central repo path' },
+                { label: '$(settings-gear) Open VS Code Settings', description: 'Open full settings in editor' }
+            ];
+
+            const picked = await vscode.window.showQuickPick(items, {
+                placeHolder: 'SkillBox Settings'
+            });
+
+            if (!picked) { return; }
+
+            if (picked.label.includes('Default Agent')) {
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'skillbox.defaultAgent');
+            } else if (picked.label.includes('Project Install Directories')) {
+                await configureProjectInstallDirs();
+            } else if (picked.label.includes('Central Repository')) {
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'skillbox.centralRepo');
+            } else {
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'skillbox');
+            }
         }),
 
         // Sync Source

@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { execSync } from 'child_process';
 import simpleGit from 'simple-git';
 import { Source, Skill, SourceType, SkillType } from '../types';
 
@@ -191,9 +190,11 @@ export class SourceManager {
                         await git.reset(['--hard', `origin/${branch}`]);
                     }
                 } else {
-                    execSync(`git clone ${source.url} "${sourceDir}"`, { stdio: 'pipe' });
+                    await simpleGit().clone(source.url, sourceDir);
                     if (source.branch) {
-                        execSync(`git fetch origin "${source.branch}" && git checkout "${source.branch}"`, { cwd: sourceDir, stdio: 'pipe' });
+                        const git = simpleGit(sourceDir);
+                        await git.fetch('origin', source.branch);
+                        await git.checkout(source.branch);
                     }
                 }
             } else {
@@ -241,47 +242,7 @@ export class SourceManager {
             }
         }
 
-        // 2. Scan instruction directories
-        const instrDirPaths = ['instructions', '.github/instructions', '.agents/instructions', 'github/instructions'];
-        for (const id of instrDirPaths) {
-            const fullDir = path.join(dir, id);
-            if (fs.existsSync(fullDir)) {
-                fs.readdirSync(fullDir)
-                    .filter(f => f.endsWith('.instructions.md'))
-                    .forEach(f => {
-                        const fp = path.join(fullDir, f);
-                        const skill = this.parseInstructionFile(fp, f, 'instruction', sourceId, dir);
-                        if (skill) { skills.push(skill); }
-                    });
-            }
-        }
-
-        // 3. Scan agent directories
-        const agentDirPaths = ['agents', '.github/agents', '.agents/agents', 'github/agents'];
-        for (const ad of agentDirPaths) {
-            const fullDir = path.join(dir, ad);
-            if (fs.existsSync(fullDir)) {
-                fs.readdirSync(fullDir)
-                    .filter(f => f.endsWith('.agent.md'))
-                    .forEach(f => {
-                        const fp = path.join(fullDir, f);
-                        const skill = this.parseInstructionFile(fp, f, 'agent', sourceId, dir);
-                        if (skill) { skills.push(skill); }
-                    });
-            }
-        }
-
-        // 4. Scan special files
-        const specialFiles = ['copilot-instructions.md', 'AGENT.md', 'CLAUDE.md'];
-        for (const specialFile of specialFiles) {
-            const specialPath = path.join(dir, specialFile);
-            if (fs.existsSync(specialPath)) {
-                const skill = this.parseInstructionFile(specialPath, specialFile, 'special', sourceId, dir);
-                if (skill) { skills.push(skill); }
-            }
-        }
-
-        // 5. Recursively find SKILL.md files anywhere else
+        // 2. Recursively find SKILL.md files anywhere else
         this.findSkillFiles(dir, sourceId, skills, dir);
 
         // Deduplicate by path
@@ -326,38 +287,6 @@ export class SourceManager {
             name,
             description,
             path: dir,
-            type,
-            sourceId
-        };
-    }
-
-    private parseInstructionFile(filePath: string, filename: string, type: SkillType, sourceId: string, sourceDir: string): Skill | null {
-        const content = fs.readFileSync(filePath, 'utf-8');
-
-        let name = filename;
-        if (type === 'instruction') {
-            name = filename.replace(/\.instructions\.md$/, '');
-        } else if (type === 'agent') {
-            name = filename.replace(/\.agent\.md$/, '');
-        } else if (type === 'special') {
-            name = filename;
-        }
-
-        const lines = content.split('\n');
-        let description = '';
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
-                description = trimmed.substring(0, 100) + (trimmed.length > 100 ? '...' : '');
-                break;
-            }
-        }
-
-        return {
-            id: this.stableSkillId(sourceId, path.relative(sourceDir, filePath)),
-            name,
-            description,
-            path: filePath,
             type,
             sourceId
         };

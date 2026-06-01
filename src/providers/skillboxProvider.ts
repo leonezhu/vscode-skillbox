@@ -84,34 +84,9 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
             });
         }
 
-        const skillType = (element as any).skillType;
-        if (skillType) {
-            const source = (element as any).source as Source;
-            const skills = this.sourceManager.getSkills(source.id).filter(s => s.type === skillType);
-            return this.buildSkillItems(skills, source);
-        }
-
         const source = (element as any).source as Source;
         if (source) {
             const skills = this.sourceManager.getSkills(source.id);
-            const grouped = this.groupByType(skills);
-
-            if (Object.keys(grouped).length > 1) {
-                const items: vscode.TreeItem[] = [];
-                for (const [type, typeSkills] of Object.entries(grouped)) {
-                    const typeItem = new vscode.TreeItem(
-                        this.getTypeLabel(type),
-                        vscode.TreeItemCollapsibleState.Collapsed
-                    );
-                    typeItem.iconPath = new vscode.ThemeIcon(this.getTypeIcon(type));
-                    typeItem.description = `(${typeSkills.length})`;
-                    (typeItem as any).source = source;
-                    (typeItem as any).skillType = type;
-                    items.push(typeItem);
-                }
-                return items;
-            }
-
             return this.buildSkillItems(skills, source);
         }
 
@@ -166,34 +141,4 @@ export class SkillBoxProvider implements vscode.TreeDataProvider<vscode.TreeItem
         return item;
     }
 
-    private groupByType(skills: Skill[]): Record<string, Skill[]> {
-        const grouped: Record<string, Skill[]> = {};
-        for (const skill of skills) {
-            if (!grouped[skill.type]) {
-                grouped[skill.type] = [];
-            }
-            grouped[skill.type].push(skill);
-        }
-        return grouped;
-    }
-
-    private getTypeLabel(type: string): string {
-        const labels: Record<string, string> = {
-            'skill': 'Skills',
-            'instruction': 'Instructions',
-            'agent': 'Agents',
-            'special': 'Special Files'
-        };
-        return labels[type] || type;
-    }
-
-    private getTypeIcon(type: string): string {
-        const icons: Record<string, string> = {
-            'skill': 'package',
-            'instruction': 'book',
-            'agent': 'hubot',
-            'special': 'star'
-        };
-        return icons[type] || 'file';
-    }
 }

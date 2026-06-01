@@ -19,8 +19,8 @@ export type InstallMethod = 'copy' | 'symlink';
 
 // Agent path mapping
 export const AGENT_PATHS: Record<string, { project: string; global: string; label: string }> = {
-    'github-copilot': { project: '.agents/skills', global: '~/.copilot/skills', label: 'GitHub Copilot' },
-    'copilot':       { project: '.agents/skills', global: '~/.copilot/skills', label: 'GitHub Copilot' },
+    'github-copilot': { project: '.github/skills', global: '~/.copilot/skills', label: 'GitHub Copilot' },
+    'copilot':       { project: '.github/skills', global: '~/.copilot/skills', label: 'GitHub Copilot' },
     'opencode':      { project: '.agents/skills', global: '~/.config/opencode/skills', label: 'OpenCode' },
     'claude-code':   { project: '.claude/skills', global: '~/.claude/skills', label: 'Claude Code' },
     'cursor':        { project: '.agents/skills', global: '~/.cursor/skills', label: 'Cursor' },

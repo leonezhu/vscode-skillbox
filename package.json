@@ -2,7 +2,7 @@
   "name": "skillbox",
   "displayName": "SkillBox",
   "description": "VSCode extension for managing Agent Skills from subscription sources",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "publisher": "leonezhu",
   "license": "MIT",
   "repository": {

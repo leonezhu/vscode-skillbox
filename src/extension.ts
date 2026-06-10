@@ -487,10 +487,9 @@ export function activate(context: vscode.ExtensionContext) {
                 // 全局安装选项
                 const globalPath = installer.getInstallPath(skill, agent, 'global');
                 if (globalPath) {
-                    const homeDir = process.env.HOME || '';
-                    items.push({
+                        items.push({
                         label: '$(home) Install to Global',
-                        description: globalPath.startsWith(homeDir) ? globalPath.replace(homeDir, '~') : globalPath,
+                        description: globalPath.replace((process.env.HOME || process.env.USERPROFILE) || '', '~'),
                         detail: globalPath
                     });
                 }

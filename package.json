@@ -20,7 +20,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:skillbox"
+    "onView:skillbox.sources"
   ],
   "main": "./out/extension.js",
   "contributes": {

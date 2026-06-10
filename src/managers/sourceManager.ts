@@ -3,7 +3,42 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import simpleGit from 'simple-git';
+import * as os from 'os';
 import { Source, Skill, SourceType, SkillType } from '../types';
+
+// Resolve git binary path, with fallback for Windows environments
+// where git may not be in VS Code's PATH
+function resolveGitPath(): string | undefined {
+    const platform = os.platform();
+    if (platform !== 'win32') {
+        return undefined; // Use default resolution on macOS/Linux
+    }
+    // Common Windows git install locations
+    const candidates: string[] = [
+        process.env.GIT_PATH || '',
+        `${process.env.LOCALAPPDATA || ''}\\Programs\\Git\\cmd\\git.exe`,
+        `${process.env.LOCALAPPDATA || ''}\\Programs\\Git\\bin\\git.exe`,
+        `${process.env.ProgramFiles || ''}\\Git\\cmd\\git.exe`,
+        `${process.env.ProgramFiles || ''}\\Git\\bin\\git.exe`,
+        'C:\\Program Files\\Git\\cmd\\git.exe',
+        'C:\\Program Files\\Git\\bin\\git.exe',
+    ];
+    for (const p of candidates) {
+        if (p && fs.existsSync(p)) {
+            return p;
+        }
+    }
+    return undefined;
+}
+
+function createSimpleGit(basePath?: string) {
+    const gitPath = resolveGitPath();
+    const options: { baseDir?: string; binary?: string } = { baseDir: basePath };
+    if (gitPath) {
+        options.binary = gitPath;
+    }
+    return simpleGit(options);
+}
 
 export class SourceManager {
     private context: vscode.ExtensionContext;
@@ -180,7 +215,7 @@ export class SourceManager {
                 sourceDir = this.getCachePath(source);
 
                 if (fs.existsSync(sourceDir)) {
-                    const git = simpleGit(sourceDir);
+                    const git = createSimpleGit(sourceDir);
                     const branch = source.branch || (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
                     await git.checkout(branch);
                     try {
@@ -190,9 +225,9 @@ export class SourceManager {
                         await git.reset(['--hard', `origin/${branch}`]);
                     }
                 } else {
-                    await simpleGit().clone(source.url, sourceDir);
+                    await createSimpleGit().clone(source.url, sourceDir);
                     if (source.branch) {
-                        const git = simpleGit(sourceDir);
+                        const git = createSimpleGit(sourceDir);
                         await git.fetch('origin', source.branch);
                         await git.checkout(source.branch);
                     }
